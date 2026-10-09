@@ -41,6 +41,17 @@ public class PermisoOverride {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    protected PermisoOverride() {}
+
+    PermisoOverride(Usuario usuario, String permiso, boolean allow, UUID createdBy) {
+        int separador = permiso.indexOf(':');
+        this.usuario = usuario;
+        this.resource = permiso.substring(0, separador);
+        this.action = permiso.substring(separador + 1);
+        this.allow = allow;
+        this.createdBy = createdBy;
+    }
+
     public String permiso() {
         return resource + ":" + action;
     }
@@ -55,5 +66,9 @@ public class PermisoOverride {
 
     public boolean isAllow() {
         return allow;
+    }
+
+    void setAllow(boolean allow) {
+        this.allow = allow;
     }
 }

@@ -1,5 +1,6 @@
 package co.edu.uam.syllabus.acceso;
 
+import co.edu.uam.syllabus.auditoria.AuditEvent;
 import co.edu.uam.syllabus.common.AppProperties;
 import co.edu.uam.syllabus.common.security.JwtService;
 import co.edu.uam.syllabus.usuarios.Usuario;
@@ -11,9 +12,12 @@ import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
@@ -28,6 +32,7 @@ public class AuthService {
 
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
     private static final SecureRandom RANDOM = new SecureRandom();
+    private static final String ENTIDAD = "session";
 
     private final UsuarioRepository usuarios;
     private final PasswordResetTokenRepository tokens;
@@ -35,27 +40,40 @@ public class AuthService {
     private final JwtService jwtService;
     private final JavaMailSender mailSender;
     private final AppProperties props;
+    private final ApplicationEventPublisher eventos;
 
     public AuthService(UsuarioRepository usuarios, PasswordResetTokenRepository tokens, PasswordEncoder passwordEncoder,
-                       JwtService jwtService, JavaMailSender mailSender, AppProperties props) {
+                       JwtService jwtService, JavaMailSender mailSender, AppProperties props,
+                       ApplicationEventPublisher eventos) {
         this.usuarios = usuarios;
         this.tokens = tokens;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.mailSender = mailSender;
         this.props = props;
+        this.eventos = eventos;
     }
 
     public record Sesion(String token, Usuario usuario) {}
 
-    /** UC1. */
-    @Transactional(readOnly = true)
+    /** UC1. Sin transacción propia: así el intento fallido también queda en la auditoría. */
     public Sesion login(String email, String password) {
-        Usuario usuario = usuarios.findDetalleByEmailIgnoreCase(email.trim())
+        Optional<Usuario> encontrado = usuarios.findDetalleByEmailIgnoreCase(email.trim());
+        Optional<Usuario> valido = encontrado
                 .filter(Usuario::isActive)
-                .filter(u -> passwordEncoder.matches(password, u.getPasswordHash()))
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Credenciales inválidas."));
+                .filter(u -> passwordEncoder.matches(password, u.getPasswordHash()));
+        if (valido.isEmpty()) {
+            eventos.publishEvent(AuditEvent.de(null, "LOGIN_FAILED", ENTIDAD,
+                    encontrado.map(Usuario::getId).orElse(null)).con(Map.of("email", email.trim().toLowerCase())));
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Credenciales inválidas.");
+        }
+        Usuario usuario = valido.get();
+        eventos.publishEvent(AuditEvent.de(usuario.getId(), "LOGIN", ENTIDAD, usuario.getId()));
         return new Sesion(jwtService.emitir(usuario.getId(), usuario.getEmail()), usuario);
+    }
+
+    public void logout(UUID usuarioId) {
+        eventos.publishEvent(AuditEvent.de(usuarioId, "LOGOUT", ENTIDAD, usuarioId));
     }
 
     @Transactional(readOnly = true)
@@ -71,6 +89,7 @@ public class AuthService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La contraseña actual no es correcta.");
         }
         usuario.setPasswordHash(passwordEncoder.encode(nueva));
+        eventos.publishEvent(AuditEvent.de(usuarioId, "PASSWORD_CHANGE", ENTIDAD, usuarioId));
     }
 
     /**
@@ -85,6 +104,7 @@ public class AuthService {
             String token = generarToken();
             tokens.save(new PasswordResetToken(usuario, hash(token), ahora.plus(props.passwordResetExpiresIn())));
             enviarCorreo(usuario, props.url() + "/reset-password?token=" + token);
+            eventos.publishEvent(AuditEvent.de(usuario.getId(), "PASSWORD_RESET_REQUEST", ENTIDAD, usuario.getId()));
         });
     }
 
@@ -99,6 +119,7 @@ public class AuthService {
         usuario.setPasswordHash(passwordEncoder.encode(nueva));
         registro.usar(ahora);
         tokens.invalidarPendientes(usuario.getId(), ahora);
+        eventos.publishEvent(AuditEvent.de(usuario.getId(), "PASSWORD_RESET", ENTIDAD, usuario.getId()));
     }
 
     private void enviarCorreo(Usuario usuario, String enlace) {

@@ -47,7 +47,8 @@ public class AuthController {
 
     /** JWT sin estado: el cliente descarta el token. */
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout() {
+    public ResponseEntity<Void> logout(@AuthenticationPrincipal UsuarioAutenticado actual) {
+        authService.logout(actual.id());
         return ResponseEntity.noContent().build();
     }
 
