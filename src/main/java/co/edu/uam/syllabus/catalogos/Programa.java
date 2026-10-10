@@ -30,6 +30,10 @@ public class Programa extends BaseEntity {
     @JoinColumn(name = "department_id")
     private Departamento departamento;
 
+    /** Correo de la coordinación; si es nulo el programa no tiene coordinación (ver V6__correo_coordinacion.sql). */
+    @Column(name = "coordination_email")
+    private String coordinationEmail;
+
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 
@@ -63,6 +67,14 @@ public class Programa extends BaseEntity {
 
     public void setDepartamento(Departamento departamento) {
         this.departamento = departamento;
+    }
+
+    public String getCoordinationEmail() {
+        return coordinationEmail;
+    }
+
+    public void setCoordinationEmail(String coordinationEmail) {
+        this.coordinationEmail = coordinationEmail;
     }
 
     public boolean isActive() {

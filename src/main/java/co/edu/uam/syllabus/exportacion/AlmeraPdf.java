@@ -149,8 +149,15 @@ public class AlmeraPdf {
                 dataUri, ancho, alto);
     }
 
+    /**
+     * Tabla de identificación. Si el programa tiene coordinación, «Docente (s)» queda vacío y el correo
+     * es el de la coordinación; si no (p. ej. posgrados), se muestran el docente asignado y su correo.
+     */
     private static List<FilaIdentificacion> identificacion(SyllabusResponse s) {
         SyllabusResponse.Materia m = s.subject();
+        String coordinacion = m.program().coordinationEmail();
+        String docente = coordinacion != null ? "" : m.professor() == null ? "Por asignar" : m.professor().name();
+        String correo = coordinacion != null ? coordinacion : m.professor() == null ? "" : m.professor().email();
         Function<Integer, String> horas = h -> h == null ? "—" : String.valueOf(h);
         List<String> valores = List.of(
                 m.name(), m.code(),
@@ -160,13 +167,11 @@ public class AlmeraPdf {
                 String.valueOf(m.credits()),
                 horas.apply(m.hoursPresencial()), horas.apply(m.hoursDirigido()), horas.apply(m.hoursIndependiente()),
                 textoO(m.prerequisites(), "Ninguno"),
-                s.academicPeriod(),
-                m.professor() == null ? "Por asignar" : m.professor().name(),
-                m.professor() == null ? "—" : m.professor().email());
+                s.academicPeriod(), docente, correo);
         List<FilaIdentificacion> filas = new ArrayList<>();
         for (int i = 0; i < ROTULOS_IDENTIFICACION.size(); i++) {
-            boolean correo = i == ROTULOS_IDENTIFICACION.size() - 1 && m.professor() != null;
-            filas.add(new FilaIdentificacion(ROTULOS_IDENTIFICACION.get(i), valores.get(i), correo));
+            boolean esCorreo = i == ROTULOS_IDENTIFICACION.size() - 1;
+            filas.add(new FilaIdentificacion(ROTULOS_IDENTIFICACION.get(i), valores.get(i), esCorreo));
         }
         return filas;
     }

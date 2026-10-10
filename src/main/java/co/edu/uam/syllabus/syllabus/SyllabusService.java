@@ -136,7 +136,8 @@ public class SyllabusService {
         }
         Alcance escritura = scopeService.de(actor.id(), true);
         return encontrados.stream()
-                .map(s -> SyllabusResponse.detalle(s, versionActual(s.getId()), enAlcance(escritura, s.getAsignatura())))
+                .map(s -> SyllabusResponse.detalle(s, versionActual(s.getId()),
+                        enAlcance(escritura, s.getAsignatura())))
                 .toList();
     }
 
@@ -180,6 +181,7 @@ public class SyllabusService {
         s.setStatus(estado);
         aplicarEncabezado(actor, s, req.headerTitle(), req.documentCode(), req.documentDate());
         s.reemplazarSecciones(secciones(req.sections(), estado));
+        validarContacto(s);
         syllabus.saveAndFlush(s);
 
         registrarVersion(s, 1, "Creación del syllabus", autor);
@@ -207,6 +209,7 @@ public class SyllabusService {
         s.setStatus(req.status());
         aplicarEncabezado(actor, s, req.headerTitle(), req.documentCode(), req.documentDate());
         s.reemplazarSecciones(secciones(req.sections(), req.status()));
+        validarContacto(s);
         if (anterior.equals(VersionSyllabus.Snapshot.de(s))) {
             throw invalido("No hay cambios para guardar.");
         }
@@ -272,6 +275,19 @@ public class SyllabusService {
         return resultado;
     }
 
+    /**
+     * El syllabus vigente debe tener a quién contactar: el correo de la coordinación del programa o,
+     * si el programa no tiene coordinación (p. ej. posgrados), el docente asignado a la asignatura.
+     */
+    private static void validarContacto(Syllabus s) {
+        Asignatura a = s.getAsignatura();
+        if (s.getStatus() == Syllabus.Estado.ACTIVO && a.getPrograma().getCoordinationEmail() == null
+                && a.getProfesor() == null) {
+            throw invalido("El programa " + a.getPrograma().getName() + " no tiene correo de coordinación: asigne "
+                    + "un docente a la asignatura antes de activar el syllabus.");
+        }
+    }
+
     private static List<Evaluacion.Corte> normalizar(List<Evaluacion.Corte> cortes) {
         if (cortes == null) {
             return null;
@@ -335,7 +351,9 @@ public class SyllabusService {
             if (f.departmentId() != null) p.add(cb.equal(depto.get("id"), f.departmentId()));
             if (f.programId() != null) p.add(cb.equal(a.get("programa").get("id"), f.programId()));
             if (f.subjectId() != null) p.add(cb.equal(a.get("id"), f.subjectId()));
-            if (StringUtils.hasText(f.academicPeriod())) p.add(cb.equal(root.get("academicPeriod"), f.academicPeriod()));
+            if (StringUtils.hasText(f.academicPeriod())) {
+                p.add(cb.equal(root.get("academicPeriod"), f.academicPeriod()));
+            }
             if (f.status() != null) p.add(cb.equal(root.get("status"), f.status()));
             if (StringUtils.hasText(f.search())) {
                 String patron = "%" + f.search().trim().toLowerCase() + "%";

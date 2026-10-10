@@ -38,10 +38,25 @@ class ExportacionTest extends PruebaIntegracion {
             String texto = texto(documento);
             assertThat(texto)
                     .contains("SYLLABUS DE LA ASIGNATURA", "CÓDIGO: GFR-FOR-005", "VERSIÓN: 6")
-                    .contains("IDENTIFICACIÓN", "Base de Datos I", "profesor@autonoma.edu.co")
+                    .contains("IDENTIFICACIÓN", "Base de Datos I", "coordinacion.sistemas@autonoma.edu.co")
                     .contains("ESTRATEGIA DE EVALUACIÓN DEL APRENDIZAJE", "TIPO DE EVALUACIÓN", "Avance proyecto")
                     .contains("Fundamentals of Database Systems", "Requerida");
         }
+    }
+
+    @Test
+    void elContactoEsLaCoordinacionYSoloSinCoordinacionElDocente() throws Exception {
+        // Ing. de Sistemas tiene coordinación: «Docente (s)» queda vacío y sale el correo de la coordinación.
+        String pregrado = textoPdf(mvc.perform(como("profesor", get("/api/export/syllabus/" + BASE_DE_DATOS)))
+                .andReturn().getResponse().getContentAsByteArray());
+        assertThat(pregrado).contains("Docente (s) E-mail docente (s) coordinacion.sistemas@autonoma.edu.co")
+                .doesNotContain("profesor@autonoma.edu.co");
+
+        // La maestría no tiene coordinación: sale el docente asignado y su correo.
+        String posgrado = textoPdf(mvc.perform(como("profesor", get("/api/export/syllabus/" + POSGRADO)))
+                .andReturn().getResponse().getContentAsByteArray());
+        assertThat(posgrado)
+                .contains("Docente (s) Carlos Andrés Martínez E-mail docente (s) profesor@autonoma.edu.co");
     }
 
     @Test
@@ -82,6 +97,14 @@ class ExportacionTest extends PruebaIntegracion {
                 .andReturn().getResponse().getContentAsByteArray();
         try (PDDocument documento = Loader.loadPDF(pdf)) {
             assertThat(texto(documento)).contains("Nombre asignatura", "TIPO DE EVALUACIÓN");
+        }
+    }
+
+    private static final String POSGRADO = "50000000-0000-0000-0000-000000000005";
+
+    private static String textoPdf(byte[] pdf) throws IOException {
+        try (PDDocument documento = Loader.loadPDF(pdf)) {
+            return texto(documento);
         }
     }
 

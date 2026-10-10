@@ -1,10 +1,12 @@
 package co.edu.uam.syllabus.catalogos;
 
 import co.edu.uam.syllabus.auditoria.AuditEvent;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -13,6 +15,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 /** UC5 departamentos y UC6 programas (pregrado con departamento, posgrado sin él). */
@@ -45,6 +48,7 @@ public class CatalogoService {
             @NotBlank @Size(max = 20) String code,
             @NotNull Programa.Nivel level,
             UUID departmentId,
+            @Email @Size(max = 150) String coordinationEmail,
             Boolean isActive) {}
 
     // ---------- Departamentos (UC5) ----------
@@ -202,6 +206,8 @@ public class CatalogoService {
         p.setCode(codigo);
         p.setLevel(req.level());
         p.setDepartamento(esPosgrado(req.level()) ? null : departamentoActivo(req.departmentId()));
+        p.setCoordinationEmail(StringUtils.hasText(req.coordinationEmail())
+                ? req.coordinationEmail().trim().toLowerCase(Locale.ROOT) : null);
         if (req.isActive() != null) {
             p.setActive(req.isActive());
         }
