@@ -68,12 +68,14 @@ public class AsignaturaService {
             @Size(max = 300) String prerequisites,
             Boolean isActive) {}
 
-    public record Filtros(UUID departmentId, UUID programId, UUID professorId, String search, boolean includeInactive) {}
+    /** manageable: solo las asignaturas del alcance de gestión (p. ej. para crear su syllabus). */
+    public record Filtros(UUID departmentId, UUID programId, UUID professorId, String search, boolean includeInactive,
+                          boolean manageable) {}
 
-    /** Lista las asignaturas dentro del alcance de lectura del usuario. */
+    /** Lista las asignaturas dentro del alcance de lectura (o de gestión, si se pide) del usuario. */
     @Transactional(readOnly = true)
     public List<AsignaturaResponse> listar(UUID actor, Filtros f) {
-        Alcance alcance = scopeService.de(actor, false);
+        Alcance alcance = scopeService.de(actor, f.manageable());
         Map<UUID, Long> syllabus = CatalogoService.conteos(asignaturas.contarSyllabusPorAsignatura());
         return asignaturas.findAll(especificacion(f, alcance), Sort.by("code")).stream()
                 .map(a -> AsignaturaResponse.from(a, syllabus.getOrDefault(a.getId(), 0L)))

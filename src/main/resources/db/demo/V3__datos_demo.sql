@@ -74,9 +74,10 @@ INSERT INTO syllabus (id, subject_id, academic_period, title, header_title, docu
     ('50000000-0000-0000-0000-000000000004', '30000000-0000-0000-0000-000000000004', '2026-01', 'Syllabus Algoritmos - 2026-01', NULL, NULL, NULL, 'BORRADOR', '40000000-0000-0000-0000-000000000001', '2026-01-20T08:00:00Z', '2026-02-01T09:00:00Z'),
     ('50000000-0000-0000-0000-000000000005', '30000000-0000-0000-0000-000000000007', '2026-01', 'Syllabus Aprendizaje Automático Avanzado - 2026-01', 'SYLLABUS DE LA ASIGNATURA', 'GFR-FOR-005', '01/03/2026', 'ACTIVO', '40000000-0000-0000-0000-000000000006', '2026-01-30T08:00:00Z', '2026-02-28T09:00:00Z');
 
--- Tabla de evaluación compartida por los syllabus demo de pregrado.
+-- Estrategia de evaluación (UC20) de los syllabus demo de pregrado: los cortes de la plantilla
+-- institucional con sus tipos y porcentajes parciales.
 WITH evaluacion AS (
-    SELECT '{"type":"evaluationTable","structure":{"cuts":3,"columns":[{"id":"cut","label":"Corte","type":"label","editable":false},{"id":"type","label":"Tipo de evaluación","type":"text","editable":true,"required":true},{"id":"partial","label":"% Parcial","type":"number","editable":true,"required":true},{"id":"total","label":"% Total","type":"number","editable":false}]},"values":{"rows":[{"cut":1,"type":"Quiz","partial":30,"total":30},{"cut":1,"type":"Talleres","partial":30,"total":30},{"cut":1,"type":"Avance proyecto","partial":40,"total":40},{"cut":2,"type":"Quiz","partial":30,"total":35},{"cut":2,"type":"Talleres","partial":30,"total":35},{"cut":2,"type":"Avance proyecto","partial":40,"total":40},{"cut":3,"type":"Quiz","partial":40,"total":35},{"cut":3,"type":"Entrega final proyecto","partial":60,"total":60}]},"totals":{"cut1":100,"cut2":100,"cut3":100,"general":100},"lockedStructure":true}'::jsonb AS tabla
+    SELECT '[{"corte":1,"label":"PRIMER CORTE","porcentaje":30,"tipos":[{"tipo":"Quiz","porcentaje":30},{"tipo":"Talleres","porcentaje":30},{"tipo":"Avance proyecto","porcentaje":40}]},{"corte":2,"label":"SEGUNDO CORTE","porcentaje":35,"tipos":[{"tipo":"Quiz","porcentaje":30},{"tipo":"Talleres","porcentaje":30},{"tipo":"Avance proyecto","porcentaje":40}]},{"corte":3,"label":"TERCER CORTE","porcentaje":35,"tipos":[{"tipo":"Quiz","porcentaje":40},{"tipo":"Entrega final proyecto","porcentaje":60}]}]'::jsonb AS tabla
 )
 INSERT INTO syllabus_sections (syllabus_id, section_type, title, content, evaluation, section_order)
 SELECT '50000000-0000-0000-0000-000000000001'::uuid, t.section_type, t.title, t.content, t.evaluation, t.section_order
@@ -109,25 +110,40 @@ INSERT INTO syllabus_sections (syllabus_id, section_type, title, content, evalua
     ('50000000-0000-0000-0000-000000000005', 'justification', 'Justificación', 'El aprendizaje automático avanzado aporta al estudiante de maestría las herramientas teóricas y prácticas para diseñar, evaluar y desplegar modelos de aprendizaje supervisado y no supervisado sobre datos a gran escala, habilitándolo para liderar proyectos de inteligencia artificial en la industria y la academia.', NULL, 2),
     ('50000000-0000-0000-0000-000000000005', 'contents', 'Contenidos Programáticos', E'1. Fundamentos de aprendizaje estadístico\n   - Sesgo y varianza\n   - Regularización (L1, L2)\n   - Validación cruzada\n\n2. Modelos supervisados avanzados\n   - Bosques aleatorios y Gradient Boosting\n   - Máquinas de vectores de soporte\n   - Redes neuronales profundas\n\n3. Modelos no supervisados\n   - Clustering y reducción de dimensionalidad\n   - Detección de anomalías\n\n4. Despliegue e IA responsable\n   - MLOps y monitoreo de modelos\n   - Explicabilidad, ética y sesgo algorítmico', NULL, 3),
     ('50000000-0000-0000-0000-000000000005', 'evaluation', 'Estrategia de Evaluación del Aprendizaje', NULL,
-     '{"type":"evaluationTable","structure":{"cuts":3,"columns":[{"id":"cut","label":"Corte","type":"label","editable":false},{"id":"type","label":"Tipo de evaluación","type":"text","editable":true,"required":true},{"id":"partial","label":"% Parcial","type":"number","editable":true,"required":true},{"id":"total","label":"% Total","type":"number","editable":false}]},"values":{"rows":[{"cut":1,"type":"Talleres de modelado","partial":30,"total":30},{"cut":1,"type":"Parcial teórico-práctico","partial":30,"total":30},{"cut":1,"type":"Avance proyecto aplicado","partial":40,"total":40},{"cut":2,"type":"Talleres de modelado","partial":30,"total":35},{"cut":2,"type":"Parcial teórico-práctico","partial":30,"total":35},{"cut":2,"type":"Avance proyecto aplicado","partial":40,"total":40},{"cut":3,"type":"Entrega final proyecto aplicado","partial":100,"total":35}]},"totals":{"cut1":100,"cut2":100,"cut3":100,"general":100},"lockedStructure":true}', 4),
+     '[{"corte":1,"label":"PRIMER CORTE","porcentaje":30,"tipos":[{"tipo":"Talleres de modelado","porcentaje":30},{"tipo":"Parcial teórico-práctico","porcentaje":30},{"tipo":"Avance proyecto aplicado","porcentaje":40}]},{"corte":2,"label":"SEGUNDO CORTE","porcentaje":35,"tipos":[{"tipo":"Talleres de modelado","porcentaje":30},{"tipo":"Parcial teórico-práctico","porcentaje":30},{"tipo":"Avance proyecto aplicado","porcentaje":40}]},{"corte":3,"label":"TERCER CORTE","porcentaje":35,"tipos":[{"tipo":"Entrega final proyecto aplicado","porcentaje":100}]}]', 4),
     ('50000000-0000-0000-0000-000000000005', 'bibliography', 'Bibliografía', E'Requerida:\n- Bishop, C. (2006). Pattern Recognition and Machine Learning. Springer.\n- Geron, A. (2022). Hands-On Machine Learning with Scikit-Learn, Keras, and TensorFlow (3rd ed.). O''Reilly.\n\nSugerida:\n- Goodfellow, I., Bengio, Y. & Courville, A. (2016). Deep Learning. MIT Press.\n- Hastie, T., Tibshirani, R. & Friedman, J. (2009). The Elements of Statistical Learning (2nd ed.). Springer.', NULL, 5);
 
--- Versiones iniciales (UC22): snapshot con la misma forma que genera el backend.
+-- Historial (UC22): snapshot con la misma forma que genera el backend. La versión 1 de Base de
+-- Datos I no tenía el módulo 4 ni la bibliografía de Coronel, para mostrar la comparación (UC14).
 INSERT INTO syllabus_versions (syllabus_id, version_number, snapshot, change_description, modified_by, created_at)
 SELECT s.id, v.version_number,
        jsonb_build_object(
            'title', s.title,
-           'status', s.status,
+           'status', v.status,
+           'headerTitle', s.header_title,
+           'documentCode', s.document_code,
+           'documentDate', s.document_date,
            'sections', (SELECT jsonb_agg(jsonb_build_object(
                                    'sectionType', sec.section_type,
                                    'title', sec.title,
-                                   'content', COALESCE(sec.content, sec.evaluation::text),
+                                   'content', CASE
+                                       WHEN v.anterior AND sec.section_type = 'contents'
+                                           THEN regexp_replace(sec.content, '\n\n4\. Diseño.*$', '')
+                                       WHEN v.anterior AND sec.section_type = 'bibliography'
+                                           THEN regexp_replace(sec.content, '\n- Coronel.*?Learning\.', '')
+                                       ELSE sec.content END,
+                                   'evaluation', sec.evaluation,
                                    'order', sec.section_order) ORDER BY sec.section_order)
                         FROM syllabus_sections sec WHERE sec.syllabus_id = s.id)),
        v.change_description, v.modified_by, v.created_at
 FROM syllabus s
 JOIN (VALUES
-    ('50000000-0000-0000-0000-000000000001'::uuid, 1, 'Creación inicial del syllabus', '40000000-0000-0000-0000-000000000002'::uuid, '2026-01-10T08:00:00Z'::timestamptz),
-    ('50000000-0000-0000-0000-000000000001'::uuid, 2, 'Actualización de bibliografía y contenidos del módulo 4', '40000000-0000-0000-0000-000000000001'::uuid, '2026-02-15T10:30:00Z'::timestamptz),
-    ('50000000-0000-0000-0000-000000000005'::uuid, 1, 'Creación inicial del syllabus de posgrado', '40000000-0000-0000-0000-000000000006'::uuid, '2026-01-30T08:00:00Z'::timestamptz)
-) AS v (syllabus_id, version_number, change_description, modified_by, created_at) ON v.syllabus_id = s.id;
+    ('50000000-0000-0000-0000-000000000001'::uuid, 1, 'ACTIVO', TRUE, 'Creación del syllabus', '40000000-0000-0000-0000-000000000002'::uuid, '2026-01-10T08:00:00Z'::timestamptz),
+    ('50000000-0000-0000-0000-000000000001'::uuid, 2, 'ACTIVO', FALSE, 'Actualización de bibliografía y contenidos del módulo 4', '40000000-0000-0000-0000-000000000001'::uuid, '2026-02-15T10:30:00Z'::timestamptz),
+    ('50000000-0000-0000-0000-000000000002'::uuid, 1, 'ACTIVO', FALSE, 'Creación del syllabus', '40000000-0000-0000-0000-000000000002'::uuid, '2026-01-12T08:00:00Z'::timestamptz),
+    ('50000000-0000-0000-0000-000000000003'::uuid, 1, 'ACTIVO', FALSE, 'Creación del syllabus', '40000000-0000-0000-0000-000000000002'::uuid, '2025-08-10T08:00:00Z'::timestamptz),
+    ('50000000-0000-0000-0000-000000000003'::uuid, 2, 'INACTIVO', FALSE, 'Syllabus desactivado', '40000000-0000-0000-0000-000000000002'::uuid, '2025-12-15T10:00:00Z'::timestamptz),
+    ('50000000-0000-0000-0000-000000000004'::uuid, 1, 'BORRADOR', FALSE, 'Creación del syllabus', '40000000-0000-0000-0000-000000000001'::uuid, '2026-01-20T08:00:00Z'::timestamptz),
+    ('50000000-0000-0000-0000-000000000005'::uuid, 1, 'ACTIVO', FALSE, 'Creación del syllabus', '40000000-0000-0000-0000-000000000006'::uuid, '2026-01-30T08:00:00Z'::timestamptz)
+) AS v (syllabus_id, version_number, status, anterior, change_description, modified_by, created_at)
+    ON v.syllabus_id = s.id;

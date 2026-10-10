@@ -39,9 +39,10 @@ public class AsignaturaController {
                                            @RequestParam(required = false) UUID programId,
                                            @RequestParam(required = false) UUID professorId,
                                            @RequestParam(required = false) String search,
-                                           @RequestParam(defaultValue = "false") boolean includeInactive) {
-        return service.listar(actor.id(),
-                new AsignaturaService.Filtros(departmentId, programId, professorId, search, includeInactive));
+                                           @RequestParam(defaultValue = "false") boolean includeInactive,
+                                           @RequestParam(defaultValue = "false") boolean manageable) {
+        return service.listar(actor.id(), new AsignaturaService.Filtros(
+                departmentId, programId, professorId, search, includeInactive, manageable));
     }
 
     @GetMapping("/{id}")
