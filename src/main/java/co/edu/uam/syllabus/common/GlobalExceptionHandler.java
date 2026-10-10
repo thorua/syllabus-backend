@@ -13,6 +13,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 /**
@@ -40,6 +41,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         ProblemDetail body = problema(HttpStatus.BAD_REQUEST, "Datos inválidos.");
         body.setProperty("details", campos);
         return ResponseEntity.badRequest().body(body);
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleMaxUploadSizeExceededException(
+            MaxUploadSizeExceededException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(problema(HttpStatus.PAYLOAD_TOO_LARGE, "El archivo supera el tamaño máximo de 2 MB."));
     }
 
     @Override

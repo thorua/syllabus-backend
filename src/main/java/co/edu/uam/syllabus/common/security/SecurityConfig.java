@@ -34,6 +34,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST,
                                 "/api/auth/login", "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
                         .requestMatchers("/api/docs/**", "/api/swagger-ui/**", "/actuator/health", "/error").permitAll()
+                        // El logo se muestra en <img>, que no envía el token; es información pública.
+                        .requestMatchers(HttpMethod.GET, "/api/settings/logo").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(rs -> rs.jwt(jwt -> jwt.jwtAuthenticationConverter(cargarUsuario(usuarios))))
                 .build();

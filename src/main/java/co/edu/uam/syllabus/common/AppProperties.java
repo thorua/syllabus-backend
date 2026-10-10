@@ -1,11 +1,13 @@
 package co.edu.uam.syllabus.common;
 
+import java.nio.file.Path;
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /** Configuración propia de la aplicación; todos los valores llegan por variables de entorno. */
 @ConfigurationProperties("app")
-public record AppProperties(String url, Jwt jwt, String mailFrom, Duration passwordResetExpiresIn, Admin admin) {
+public record AppProperties(String url, Jwt jwt, String mailFrom, Duration passwordResetExpiresIn, Admin admin,
+                            Path uploadsDir) {
 
     public record Jwt(String secret, Duration expiresIn) {}
 
