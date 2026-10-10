@@ -34,7 +34,8 @@ class VersionadoTest extends PruebaIntegracion {
     void cadaCambioCreaUnaVersionYLasVersionesSonInmutables() throws Exception {
         String creado = mvc.perform(como("profesor", post("/api/syllabus").content("""
                         {"subjectId": "%s", "academicPeriod": "2026-03", "title": "Syllabus Base de Datos I - 2026-03",
-                         "sections": [{"sectionType": "justification", "title": "Justificación", "content": "Primera"}]}
+                         "sections": [
+                           {"sectionType": "justification", "title": "Justificación", "content": "Primera"}]}
                         """.formatted(ASIG_BASE_DE_DATOS))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("BORRADOR"))

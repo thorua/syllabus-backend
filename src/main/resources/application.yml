@@ -47,3 +47,7 @@ management:
     web:
       exposure:
         include: health
+  # El correo solo se usa para recuperar la contraseña: un SMTP caído no debe marcar el sistema como caído.
+  health:
+    mail:
+      enabled: false

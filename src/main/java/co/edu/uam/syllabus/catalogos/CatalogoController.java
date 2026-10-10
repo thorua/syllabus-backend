@@ -52,9 +52,9 @@ public class CatalogoController {
 
     @PutMapping("/departments/{id}")
     @PreAuthorize("hasAuthority('department:update')")
-    public DepartamentoResponse actualizarDepartamento(@AuthenticationPrincipal UsuarioAutenticado actor,
-                                                       @PathVariable UUID id,
-                                                       @Valid @RequestBody CatalogoService.DepartamentoRequest request) {
+    public DepartamentoResponse actualizarDepartamento(
+            @AuthenticationPrincipal UsuarioAutenticado actor, @PathVariable UUID id,
+            @Valid @RequestBody CatalogoService.DepartamentoRequest request) {
         return service.actualizarDepartamento(actor.id(), id, request);
     }
 

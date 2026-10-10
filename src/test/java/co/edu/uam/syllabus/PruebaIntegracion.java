@@ -11,6 +11,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -18,7 +20,8 @@ import org.testcontainers.containers.PostgreSQLContainer;
 /**
  * Base de las pruebas de integración: la aplicación completa contra un PostgreSQL 16 real
  * (Testcontainers) con las migraciones y los datos demo. Un solo contenedor para todas las clases.
- * Las pruebas que escriben datos usan registros propios para no depender del orden de ejecución.
+ * Las pruebas que escriben datos usan registros propios para no depender del orden de ejecución, y
+ * las que cambian datos compartidos los restauran. El correo se simula para leer lo que se enviaría.
  */
 @SpringBootTest(properties = {
     "spring.flyway.locations=classpath:db/migration,classpath:db/demo",
@@ -45,6 +48,9 @@ public abstract class PruebaIntegracion {
 
     @Autowired
     protected MockMvc mvc;
+
+    @MockitoBean
+    protected JavaMailSender correo;
 
     /** Inicia sesión como un usuario demo (p. ej. "profesor") y devuelve su JWT. */
     protected String token(String usuario) throws Exception {

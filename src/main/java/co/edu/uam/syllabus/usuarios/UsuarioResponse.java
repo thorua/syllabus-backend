@@ -46,7 +46,8 @@ public record UsuarioResponse(
                         .sorted(Comparator.comparing(DepartamentoResponse::name)).toList(),
                 u.getProgramas().stream().map(ProgramaResponse::from)
                         .sorted(Comparator.comparing(ProgramaResponse::name)).toList(),
-                u.getOverrides().stream().map(o -> new OverrideRef(o.getAction(), o.getResource(), o.isAllow())).toList(),
+                u.getOverrides().stream()
+                        .map(o -> new OverrideRef(o.getAction(), o.getResource(), o.isAllow())).toList(),
                 u.permisosEfectivos(),
                 u.getStudentCode(),
                 u.getEmployeeCode(),

@@ -164,7 +164,8 @@ public class UsuarioService {
 
     /** UC9: afiliaciones del usuario a departamentos y programas (pregrado y posgrado). */
     @Transactional
-    public UsuarioResponse actualizarAfiliaciones(UsuarioAutenticado actor, UUID id, Set<UUID> deptoIds, Set<UUID> programaIds) {
+    public UsuarioResponse actualizarAfiliaciones(UsuarioAutenticado actor, UUID id, Set<UUID> deptoIds,
+                                                  Set<UUID> programaIds) {
         Usuario usuario = buscar(id);
         List<Departamento> deptos = departamentos.findAllById(deptoIds);
         List<Programa> progs = programas.findAllById(programaIds);

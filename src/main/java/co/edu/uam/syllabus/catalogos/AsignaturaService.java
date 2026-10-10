@@ -175,7 +175,8 @@ public class AsignaturaService {
 
     private Departamento departamentoActivo(UUID id) {
         if (id == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Una asignatura de pregrado requiere departamento.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Una asignatura de pregrado requiere departamento.");
         }
         Departamento d = catalogo.buscarDepartamento(id);
         if (!d.isActive()) {
