@@ -2,6 +2,7 @@ package co.edu.uam.syllabus.syllabus;
 
 import co.edu.uam.syllabus.common.PageResponse;
 import co.edu.uam.syllabus.common.security.UsuarioAutenticado;
+import co.edu.uam.syllabus.syllabus.versionado.VersionResponse;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;

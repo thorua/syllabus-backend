@@ -1,6 +1,7 @@
-package co.edu.uam.syllabus.syllabus;
+package co.edu.uam.syllabus.syllabus.versionado;
 
 import co.edu.uam.syllabus.configuracion.Evaluacion;
+import co.edu.uam.syllabus.syllabus.Syllabus;
 import co.edu.uam.syllabus.usuarios.Usuario;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -32,7 +33,7 @@ public class VersionSyllabus {
         public record Seccion(String sectionType, String title, String content, List<Evaluacion.Corte> evaluation,
                               int order) {}
 
-        static Snapshot de(Syllabus s) {
+        public static Snapshot de(Syllabus s) {
             return new Snapshot(s.getTitle(), s.getStatus(), s.getHeaderTitle(), s.getDocumentCode(),
                     s.getDocumentDate(), s.getSecciones().stream()
                             .map(x -> new Seccion(x.getSectionType(), x.getTitle(), x.getContent(), x.getEvaluation(),

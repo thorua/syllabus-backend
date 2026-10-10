@@ -7,7 +7,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -36,8 +35,6 @@ public class UsuarioController {
     public record PermisosRequest(@NotNull List<@Valid Item> permissionOverrides) {
         public record Item(@NotBlank String action, @NotBlank String resource, boolean allow) {}
     }
-
-    public record AfiliacionesRequest(@NotNull Set<UUID> departmentIds, @NotNull Set<UUID> programIds) {}
 
     @GetMapping
     @PreAuthorize("hasAnyAuthority('user:read', 'subject:assign')")
@@ -95,12 +92,5 @@ public class UsuarioController {
                 .map(o -> new UsuarioService.PermisoOverrideRequest(o.action(), o.resource(), o.allow()))
                 .toList();
         return service.actualizarPermisos(actor, id, pedidos);
-    }
-
-    @PutMapping("/{id}/affiliations")
-    @PreAuthorize("hasAuthority('user:affiliations')")
-    public UsuarioResponse afiliaciones(@AuthenticationPrincipal UsuarioAutenticado actor, @PathVariable UUID id,
-                                        @Valid @RequestBody AfiliacionesRequest request) {
-        return service.actualizarAfiliaciones(actor, id, request.departmentIds(), request.programIds());
     }
 }

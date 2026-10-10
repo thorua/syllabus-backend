@@ -1,4 +1,4 @@
-package co.edu.uam.syllabus.syllabus;
+package co.edu.uam.syllabus.syllabus.versionado;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.Instant;

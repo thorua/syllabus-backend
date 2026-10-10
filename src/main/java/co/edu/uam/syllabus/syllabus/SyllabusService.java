@@ -10,6 +10,9 @@ import co.edu.uam.syllabus.common.security.ScopeService;
 import co.edu.uam.syllabus.common.security.UsuarioAutenticado;
 import co.edu.uam.syllabus.configuracion.ConfiguracionService;
 import co.edu.uam.syllabus.configuracion.Evaluacion;
+import co.edu.uam.syllabus.syllabus.versionado.VersionResponse;
+import co.edu.uam.syllabus.syllabus.versionado.VersionSyllabus;
+import co.edu.uam.syllabus.syllabus.versionado.VersionadoService;
 import co.edu.uam.syllabus.usuarios.Usuario;
 import co.edu.uam.syllabus.usuarios.UsuarioRepository;
 import jakarta.persistence.criteria.CriteriaBuilder;
@@ -46,24 +49,25 @@ import org.springframework.web.server.ResponseStatusException;
 public class SyllabusService {
 
     public static final String EVALUACION = "evaluation";
+    private static final String IDENTIFICACION = "identification";
 
     private static final String ENTIDAD = "syllabus";
     private static final String TIPOS_SECCION =
             "identification|justification|performance|contents|teaching_strategies|evaluation|bibliography";
 
     private final SyllabusRepository syllabus;
-    private final VersionSyllabusRepository versiones;
+    private final VersionadoService versionado;
     private final AsignaturaRepository asignaturas;
     private final UsuarioRepository usuarios;
     private final ScopeService scopeService;
     private final ConfiguracionService configuracion;
     private final ApplicationEventPublisher eventos;
 
-    public SyllabusService(SyllabusRepository syllabus, VersionSyllabusRepository versiones,
+    public SyllabusService(SyllabusRepository syllabus, VersionadoService versionado,
                            AsignaturaRepository asignaturas, UsuarioRepository usuarios, ScopeService scopeService,
                            ConfiguracionService configuracion, ApplicationEventPublisher eventos) {
         this.syllabus = syllabus;
-        this.versiones = versiones;
+        this.versionado = versionado;
         this.asignaturas = asignaturas;
         this.usuarios = usuarios;
         this.scopeService = scopeService;
@@ -136,7 +140,7 @@ public class SyllabusService {
         }
         Alcance escritura = scopeService.de(actor.id(), true);
         return encontrados.stream()
-                .map(s -> SyllabusResponse.detalle(s, versionActual(s.getId()),
+                .map(s -> SyllabusResponse.detalle(s, versionado.actual(s.getId()),
                         enAlcance(escritura, s.getAsignatura())))
                 .toList();
     }
@@ -153,7 +157,7 @@ public class SyllabusService {
                 .filter(x -> x.getStatus() == Syllabus.Estado.ACTIVO
                         || (puedeEditar(actor) && enAlcance(escritura, x.getAsignatura())))
                 .orElseThrow(SyllabusService::noEncontrado);
-        return SyllabusResponse.detalle(s, versionActual(id), enAlcance(escritura, s.getAsignatura()));
+        return SyllabusResponse.detalle(s, versionado.actual(id), enAlcance(escritura, s.getAsignatura()));
     }
 
     @Transactional
@@ -184,9 +188,9 @@ public class SyllabusService {
         validarContacto(s);
         syllabus.saveAndFlush(s);
 
-        registrarVersion(s, 1, "Creación del syllabus", autor);
-        publicar(actor, "CREATE", s, 1);
-        return SyllabusResponse.detalle(s, 1, true);
+        int version = versionado.registrar(s, "Creación del syllabus", autor);
+        publicar(actor, "CREATE", s, version);
+        return SyllabusResponse.detalle(s, version, true);
     }
 
     /** UC12: cada guardado con cambios genera una versión nueva (UC22). */
@@ -198,7 +202,7 @@ public class SyllabusService {
                     "El syllabus está inactivo; solo un coordinador puede reactivarlo.");
         }
         validarEstadoEditable(req.status());
-        int actual = versionActual(id);
+        int actual = versionado.actual(id);
         if (req.baseVersion() != null && req.baseVersion() != actual) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Otra persona guardó cambios en este syllabus "
                     + "(versión " + actual + "). Recargue la página para editar sobre la versión actual.");
@@ -215,9 +219,9 @@ public class SyllabusService {
         }
         syllabus.flush();
 
-        registrarVersion(s, actual + 1, req.changeDescription().trim(), usuarios.getReferenceById(actor.id()));
-        publicar(actor, "UPDATE", s, actual + 1);
-        return SyllabusResponse.detalle(s, actual + 1, true);
+        int version = versionado.registrar(s, req.changeDescription().trim(), usuarios.getReferenceById(actor.id()));
+        publicar(actor, "UPDATE", s, version);
+        return SyllabusResponse.detalle(s, version, true);
     }
 
     /** UC13: borrado lógico; el historial se conserva y la desactivación queda como versión. */
@@ -229,8 +233,7 @@ public class SyllabusService {
         }
         s.setStatus(Syllabus.Estado.INACTIVO);
         syllabus.flush();
-        int version = versionActual(id) + 1;
-        registrarVersion(s, version, "Syllabus desactivado", usuarios.getReferenceById(actor.id()));
+        int version = versionado.registrar(s, "Syllabus desactivado", usuarios.getReferenceById(actor.id()));
         publicar(actor, "DELETE", s, version);
     }
 
@@ -239,13 +242,12 @@ public class SyllabusService {
         if (!syllabus.existsById(id)) {
             throw noEncontrado();
         }
-        return versiones.findBySyllabusIdOrderByVersionNumberDesc(id).stream().map(VersionResponse::resumen).toList();
+        return versionado.historial(id);
     }
 
     @Transactional(readOnly = true)
     public VersionResponse version(UUID id, UUID versionId) {
-        return versiones.findByIdAndSyllabusId(versionId, id).map(VersionResponse::detalle)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Versión no encontrada."));
+        return versionado.obtener(id, versionId);
     }
 
     private List<SeccionSyllabus> secciones(List<SeccionRequest> req, Syllabus.Estado estado) {
@@ -265,7 +267,8 @@ public class SyllabusService {
                 resultado.add(new SeccionSyllabus(x.sectionType(), titulo, null, evaluacion, i + 1));
             } else {
                 String contenido = x.content() == null ? "" : x.content().strip();
-                if (completa && contenido.isEmpty()) {
+                // La identificación se arma con los datos de la asignatura (PDF y vista web): no exige texto.
+                if (completa && contenido.isEmpty() && !IDENTIFICACION.equals(x.sectionType())) {
                     throw invalido("La sección «" + titulo + "» no tiene contenido. Complétela o guarde el "
                             + "syllabus como borrador.");
                 }
@@ -315,15 +318,6 @@ public class SyllabusService {
         if (estado == Syllabus.Estado.INACTIVO) {
             throw invalido("Para desactivar un syllabus use la opción Desactivar.");
         }
-    }
-
-    private void registrarVersion(Syllabus s, int numero, String descripcion, Usuario autor) {
-        versiones.save(new VersionSyllabus(s, numero, descripcion, autor));
-    }
-
-    private int versionActual(UUID id) {
-        return versiones.findFirstBySyllabusIdOrderByVersionNumberDesc(id)
-                .map(VersionSyllabus::getVersionNumber).orElse(0);
     }
 
     private static boolean puedeEditar(UsuarioAutenticado actor) {

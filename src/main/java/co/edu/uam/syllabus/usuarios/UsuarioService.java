@@ -1,10 +1,6 @@
 package co.edu.uam.syllabus.usuarios;
 
 import co.edu.uam.syllabus.auditoria.AuditEvent;
-import co.edu.uam.syllabus.catalogos.Departamento;
-import co.edu.uam.syllabus.catalogos.DepartamentoRepository;
-import co.edu.uam.syllabus.catalogos.Programa;
-import co.edu.uam.syllabus.catalogos.ProgramaRepository;
 import co.edu.uam.syllabus.common.AppProperties;
 import co.edu.uam.syllabus.common.PageResponse;
 import co.edu.uam.syllabus.common.security.Alcance;
@@ -45,19 +41,14 @@ public class UsuarioService {
     private static final String ENTIDAD = "user";
 
     private final UsuarioRepository usuarios;
-    private final DepartamentoRepository departamentos;
-    private final ProgramaRepository programas;
     private final ScopeService scopeService;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventos;
     private final AppProperties props;
 
-    public UsuarioService(UsuarioRepository usuarios, DepartamentoRepository departamentos,
-                          ProgramaRepository programas, ScopeService scopeService, PasswordEncoder passwordEncoder,
+    public UsuarioService(UsuarioRepository usuarios, ScopeService scopeService, PasswordEncoder passwordEncoder,
                           ApplicationEventPublisher eventos, AppProperties props) {
         this.usuarios = usuarios;
-        this.departamentos = departamentos;
-        this.programas = programas;
         this.scopeService = scopeService;
         this.passwordEncoder = passwordEncoder;
         this.eventos = eventos;
@@ -159,27 +150,6 @@ public class UsuarioService {
         });
         eventos.publishEvent(AuditEvent.de(actor.id(), "PERMISSIONS_UPDATE", ENTIDAD, id)
                 .con(Map.of("email", usuario.getEmail(), "overrides", nuevos)));
-        return UsuarioResponse.from(usuario);
-    }
-
-    /** UC9: afiliaciones del usuario a departamentos y programas (pregrado y posgrado). */
-    @Transactional
-    public UsuarioResponse actualizarAfiliaciones(UsuarioAutenticado actor, UUID id, Set<UUID> deptoIds,
-                                                  Set<UUID> programaIds) {
-        Usuario usuario = buscar(id);
-        List<Departamento> deptos = departamentos.findAllById(deptoIds);
-        List<Programa> progs = programas.findAllById(programaIds);
-        if (deptos.size() != deptoIds.size() || progs.size() != programaIds.size()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Algún departamento o programa no existe.");
-        }
-        usuario.getDepartamentos().clear();
-        usuario.getDepartamentos().addAll(deptos);
-        usuario.getProgramas().clear();
-        usuario.getProgramas().addAll(progs);
-        eventos.publishEvent(AuditEvent.de(actor.id(), "AFFILIATIONS_UPDATE", ENTIDAD, id).con(Map.of(
-                "email", usuario.getEmail(),
-                "departments", deptos.stream().map(Departamento::getCode).sorted().toList(),
-                "programs", progs.stream().map(Programa::getCode).sorted().toList())));
         return UsuarioResponse.from(usuario);
     }
 
