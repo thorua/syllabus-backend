@@ -79,15 +79,15 @@ class VersionadoTest extends PruebaIntegracion {
                          "sections": [
                            {"sectionType": "justification", "title": "Justificación", "content": "Texto"},
                            {"sectionType": "evaluation", "title": "Evaluación", "evaluation": [
-                             {"corte": 1, "label": "PRIMER CORTE", "porcentaje": 30,
+                             {"corte": 1, "label": "I", "porcentaje": 30,
                               "tipos": [{"tipo": "Quiz", "porcentaje": 50}]},
-                             {"corte": 2, "label": "SEGUNDO CORTE", "porcentaje": 35,
+                             {"corte": 2, "label": "II", "porcentaje": 35,
                               "tipos": [{"tipo": "Parcial", "porcentaje": 100}]},
-                             {"corte": 3, "label": "TERCER CORTE", "porcentaje": 35,
+                             {"corte": 3, "label": "III", "porcentaje": 35,
                               "tipos": [{"tipo": "Proyecto", "porcentaje": 100}]}]}]}
                         """.formatted(ASIG_BASE_DE_DATOS))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value(
-                        "PRIMER CORTE: los porcentajes parciales suman 50 % y deben sumar 100 %."));
+                        "I: los porcentajes parciales suman 50 % y deben sumar 100 %."));
     }
 }

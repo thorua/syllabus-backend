@@ -31,6 +31,14 @@ class EvaluacionTest {
     }
 
     @Test
+    void admiteComoMaximoTresCortes() {
+        List<Tipo> quiz = List.of(new Tipo("Quiz", 100));
+        List<Corte> cuatro = List.of(new Corte(1, "I", 25, quiz), new Corte(2, "II", 25, quiz),
+                new Corte(3, "III", 25, quiz), new Corte(4, "IV", 25, quiz));
+        assertThatThrownBy(() -> Evaluacion.validarPlantilla(cuatro)).hasMessageContaining("entre 1 y 3 cortes");
+    }
+
+    @Test
     void rechazaCortesSinRotuloONumeracionConsecutiva() {
         List<Corte> plantilla = List.of(
                 new Corte(1, " ", 50, List.of(new Tipo("Quiz", 100))),

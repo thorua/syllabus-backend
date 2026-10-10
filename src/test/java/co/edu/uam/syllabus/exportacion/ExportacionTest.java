@@ -39,8 +39,8 @@ class ExportacionTest extends PruebaIntegracion {
             assertThat(texto)
                     .contains("SYLLABUS DE LA ASIGNATURA", "CÓDIGO: GFR-FOR-005", "VERSIÓN: 6")
                     .contains("IDENTIFICACIÓN", "Base de Datos I", "profesor@autonoma.edu.co")
-                    .contains("ESTRATEGIA DE EVALUACIÓN DEL APRENDIZAJE", "PRIMER CORTE", "% PARCIAL")
-                    .contains("Fundamentals of Database Systems");
+                    .contains("ESTRATEGIA DE EVALUACIÓN DEL APRENDIZAJE", "TIPO DE EVALUACIÓN", "Avance proyecto")
+                    .contains("Fundamentals of Database Systems", "Requerida");
         }
     }
 
@@ -81,11 +81,11 @@ class ExportacionTest extends PruebaIntegracion {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsByteArray();
         try (PDDocument documento = Loader.loadPDF(pdf)) {
-            assertThat(texto(documento)).contains("Nombre asignatura", "TERCER CORTE");
+            assertThat(texto(documento)).contains("Nombre asignatura", "TIPO DE EVALUACIÓN");
         }
     }
 
-    /** Texto del PDF con los espacios normalizados: las celdas angostas parten "PRIMER CORTE" en dos líneas. */
+    /** Texto del PDF con los espacios normalizados: las celdas angostas parten "% TOTAL" en dos líneas. */
     private static String texto(PDDocument documento) throws IOException {
         return new PDFTextStripper().getText(documento).replaceAll("\\s+", " ");
     }

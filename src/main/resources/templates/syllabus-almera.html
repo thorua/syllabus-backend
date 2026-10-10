@@ -4,69 +4,91 @@
 <meta charset="UTF-8"/>
 <title th:text="${doc.encabezado.titulo}">Syllabus</title>
 <!--
-  Formato estándar Almera (UC17), con las medidas del documento institucional de referencia:
-  Carta, márgenes 30 mm laterales y 25 mm inferior; encabezado y pie a 12,49 mm del borde.
-  El cuerpo empieza a 42,7 mm (encabezado de 24,2 mm + 6 mm de separación). El margen derecho de la
-  página es 24 mm porque la tabla de identificación del formato sobresale 6 mm del margen de 30 mm;
-  el texto conserva los 30 mm con margin-right en párrafos y bibliografía.
+  Formato estándar Almera GFR-FOR-005 (UC17), con las medidas del DOCX institucional:
+  - Carta; márgenes de 30 mm a los lados y 25 mm abajo. El encabezado (tabla de 180,54 mm, 8,07 mm
+    a la izquierda del margen, desde 18,08 mm) ocupa hasta 47,8 mm, así que el cuerpo empieza a 55 mm.
+  - El margen derecho de la página es 23 mm porque la tabla de identificación sobresale 6 mm del
+    margen de 30 mm; el texto conserva los 30 mm con margin-right.
+  - Cuerpo y títulos en Times New Roman 12 pt («serif»); tabla de evaluación, encabezado y número de
+    página en Arial («sans-serif», Helvetica en PDF, con las mismas medidas).
+  - Interlineado: 5,6 mm en párrafos (1,15 de Word) y 4,9 mm en viñetas, tablas y bibliografía (sencillo).
 -->
 <style>
   @page {
     size: 215.9mm 279.4mm;
-    margin: 42.7mm 24mm 25mm 30mm;
+    margin: 55mm 23mm 25mm 30mm;
     @top-center {
       content: element(encabezado);
       vertical-align: top;
-      padding-top: 12.49mm;
+      padding-top: 18.08mm;
     }
     @bottom-right {
       content: counter(page);
       font-family: sans-serif;
       font-size: 10pt;
-      vertical-align: bottom;
-      padding-bottom: 11.6mm;
-      padding-right: 6mm;
+      vertical-align: top;
+      padding-top: 4.3mm;
+      padding-right: 7mm;
     }
   }
-  body { margin: 0; font-family: Calibri, sans-serif; font-size: 11pt; line-height: 1.15; color: #000; }
-  table { border-collapse: collapse; }
-  td, th { border: 0.5pt solid #000; }
+  body { margin: 0; font-family: serif; font-size: 12pt; line-height: 5.6mm; color: #000; }
+  p { margin: 0; }
+  table { border-collapse: collapse; table-layout: fixed; }
+  /* Los anchos de celda son de contenido: ancho de la columna del DOCX menos 3,8 mm de padding. */
+  td, th { border: 0.5pt solid #000; padding: 0 1.9mm; vertical-align: middle; }
 
-  /* Encabezado 3×3 repetido en cada página: 8,09 mm a la izquierda del margen y 180,48 mm de ancho */
-  .encabezado { position: running(encabezado); margin-left: -8.09mm; width: 180.48mm; table-layout: fixed; }
-  .encabezado td { height: 8.06mm; padding: 0; vertical-align: middle; }
-  .encabezado .logo { width: 54.63mm; text-align: center; line-height: 0; }
-  .encabezado .logo img { display: block; margin: 0 auto; }
-  .encabezado .titulo { width: 78.36mm; text-align: center; font-family: sans-serif; font-weight: bold; font-size: 11pt; }
-  .encabezado .dato { width: 47.49mm; padding: 0 1.5mm; font-family: sans-serif; font-size: 9pt; line-height: 1.15; }
+  /* Encabezado: logo | título | CÓDIGO / VERSIÓN / FECHA */
+  .encabezado { position: running(encabezado); font-family: sans-serif; }
+  .encabezado-caja { position: relative; left: -8.07mm; width: 180.54mm; }
+  .encabezado td { padding: 0; }
+  .encabezado .logo { width: 54.65mm; vertical-align: bottom; line-height: 0; }
+  .encabezado .logo img { display: block; margin-left: 0.56mm; }
+  .encabezado .titulo { width: 78.39mm; text-align: center; font-weight: bold; font-size: 11pt; }
+  .encabezado .dato { width: 43.7mm; padding: 0 1.9mm 0.4mm 1.9mm; font-size: 9pt; line-height: 3.6mm; vertical-align: bottom; }
+  .encabezado .fila1 { height: 8.25mm; }
+  .encabezado .fila2 { height: 8.22mm; }
+  .encabezado .fila3 { height: 13.13mm; }
+  .encabezado .fila3 .dato { vertical-align: middle; padding-bottom: 0; }
 
-  /* Secciones numeradas: «N.» a 6,35 mm y el título a 12,7 mm del margen, Times bold 12 pt */
-  .seccion { margin-bottom: 3.1mm; }
-  .seccion-titulo { margin: 0 0 1.56mm 6.35mm; font-family: serif; font-weight: bold; font-size: 12pt; line-height: 4.46mm; page-break-after: avoid; }
+  /* Secciones: «N.» a 6,35 mm del margen y el título a 12,7 mm, Times bold; una línea en blanco entre secciones */
+  .seccion { margin: 0 7mm 5.6mm 0; }
+  .seccion-titulo { margin-left: 6.35mm; font-weight: bold; page-break-after: avoid; }
   .seccion-titulo .numero { display: inline-block; width: 6.35mm; }
-  .parrafo { margin: 0 6mm 2.23mm 12.7mm; text-align: justify; }
-  .parrafo:last-child { margin-bottom: 0; }
 
-  .identificacion { margin-left: 4.92mm; width: 157mm; table-layout: fixed; page-break-inside: avoid; }
-  .identificacion td { padding: 1.6mm 2mm; font-weight: bold; vertical-align: middle; }
+  .parrafo, .subtitulo { margin-left: 6.35mm; text-align: justify; }
+  .subtitulo { font-weight: bold; }
+  .espacio { height: 4.9mm; }
+  /* Viñetas como en Word: ✔ a 19,05 mm y texto a 25,4 mm; «o» a 31,75 mm y texto a 38,1 mm */
+  .vineta, .subvineta, .referencia { position: relative; line-height: 4.9mm; text-align: justify; }
+  .referencia { font-family: sans-serif; text-align: left; line-height: 5.05mm; }
+  .vineta { margin-left: 25.4mm; }
+  .subvineta { margin-left: 38.1mm; }
+  .marca { position: absolute; left: -6.35mm; top: 0; }
+  .check { font-family: ZapfDingbats; font-size: 12pt; }
+  .circulo { font-family: monospace; }
+
+  /* Tabla de identificación: Times bold 12, filas de una línea sencilla */
+  .identificacion { margin: 9.6mm 0 0 4.92mm; width: 157.01mm; line-height: 4.87mm; font-weight: bold; page-break-inside: avoid; }
   .identificacion .correo { color: #4F81BD; text-decoration: underline; }
+  .junto { white-space: nowrap; }
 
-  .evaluacion { margin-left: 6.35mm; width: 140.7mm; table-layout: fixed; page-break-inside: avoid; }
-  .evaluacion th { background: #F2F2F2; font-weight: bold; text-align: center; vertical-align: middle; padding: 2.1mm 1mm; }
-  .evaluacion td { padding: 1.3mm 2mm; vertical-align: middle; }
-  .evaluacion .corte { font-weight: bold; text-align: center; padding: 1mm; }
-  .evaluacion .centro { text-align: center; padding: 1.3mm 1mm; }
+  /* Tabla de evaluación: Arial 12; CORTE (I, II, III) y % TOTAL combinados por corte */
+  .evaluacion { margin: 5.6mm 0 0 6.35mm; width: 140.71mm; font-family: sans-serif; line-height: 4.87mm; page-break-inside: avoid; }
+  .evaluacion th { font-weight: bold; text-align: center; height: 9.8mm; }
+  .evaluacion .corte { font-weight: bold; text-align: center; }
+  .evaluacion .centro { text-align: center; }
+  .evaluacion .nuevo-corte td { border-top: 1.5pt solid #000; }
 
-  /* Bibliografía APA: sangría francesa de 12,7 mm y título de la obra en cursiva */
-  .referencia { margin: 0 6mm 1.34mm 0; padding-left: 12.7mm; text-indent: -12.7mm; }
-  .referencia.rotulo { font-weight: bold; margin-bottom: 0; }
+  /* Bibliografía: rótulo en Times bold; referencias en Arial con viñeta ✔ a 6,35 mm y texto a 12,7 mm */
+  .rotulo { margin: 5.6mm 0 0 6.35mm; font-weight: bold; }
+  .referencia { margin: 0 0 0.6mm 12.7mm; }
 
-  .linea { margin-left: 12.7mm; width: 130.5mm; height: 4.46mm; border-bottom: 0.15mm solid #000; }
+  .linea { margin-left: 6.35mm; height: 5.6mm; border-bottom: 0.15mm solid #000; }
 </style>
 </head>
 <body>
-<table class="encabezado">
-  <tr>
+<div class="encabezado"><table class="encabezado-caja">
+  <tr class="fila1">
     <td class="logo" rowspan="3">
       <img th:src="${doc.encabezado.logo}" alt="Logo"
            th:style="'width:' + ${doc.encabezado.logoAnchoMm} + 'mm;height:' + ${doc.encabezado.logoAltoMm} + 'mm'"/>
@@ -74,41 +96,48 @@
     <td class="titulo" rowspan="3" th:text="${doc.encabezado.titulo}">SYLLABUS DE LA ASIGNATURA</td>
     <td class="dato"><b>CÓDIGO: </b><span th:text="${doc.encabezado.codigo}"></span></td>
   </tr>
-  <tr><td class="dato"><b>VERSIÓN: </b><span th:text="${doc.encabezado.version}"></span></td></tr>
-  <tr><td class="dato"><b>FECHA ELABORACIÓN DEL DOCUMENTO: </b><span th:text="${doc.encabezado.fecha}"></span></td></tr>
-</table>
+  <tr class="fila2"><td class="dato"><b>VERSIÓN: </b><span th:text="${doc.encabezado.version}"></span></td></tr>
+  <tr class="fila3"><td class="dato"><b>FECHA ELABORACIÓN DEL DOCUMENTO: </b><span th:text="${doc.encabezado.fecha}"></span></td></tr>
+</table></div>
 
 <div class="seccion" th:each="s : ${doc.secciones}">
-  <div class="seccion-titulo"><span class="numero" th:text="${s.numero} + '.'">1.</span><span th:text="${s.titulo}"></span></div>
+  <p class="seccion-titulo"><span class="numero" th:text="${s.numero} + '.'">1.</span><span th:text="${s.titulo}"></span></p>
 
   <th:block th:switch="${s.tipo.name()}">
     <table th:case="'IDENTIFICACION'" class="identificacion">
       <tr th:each="f : ${s.filas}">
-        <td style="width: 77.5mm" th:text="${f.rotulo}"></td>
-        <td style="width: 79.5mm" th:classappend="${f.correo} ? 'correo'" th:text="${f.valor}"></td>
+        <!-- Como en Word, una palabra con «/» (presencial/sincrónico) no se parte entre líneas. -->
+        <td style="width: 73.71mm"><th:block th:each="w, iw : ${#strings.arraySplit(f.rotulo, ' ')}"><span
+            th:class="${#strings.contains(w, '/')} ? 'junto'" th:text="${w}"></span><th:block
+            th:unless="${iw.last}"> </th:block></th:block></td>
+        <td style="width: 75.7mm" th:classappend="${f.correo} ? 'correo'" th:text="${f.valor}"></td>
       </tr>
     </table>
 
     <table th:case="'EVALUACION'" class="evaluacion">
       <tr>
-        <th style="width: 19.98mm">CORTE</th>
-        <th style="width: 60.25mm">TIPO DE EVALUACIÓN</th>
-        <th style="width: 42.27mm">% PARCIAL</th>
-        <th style="width: 18.2mm">% TOTAL</th>
+        <th style="width: 16.18mm">CORTE</th>
+        <th style="width: 56.45mm">TIPO DE EVALUACIÓN</th>
+        <th style="width: 38.48mm">%&#160; PARCIAL</th>
+        <th style="width: 14.4mm">% TOTAL</th>
       </tr>
-      <th:block th:each="c : ${s.cortes}">
-        <tr th:each="t, i : ${c.tipos}">
+      <th:block th:each="c, ic : ${s.cortes}">
+        <tr th:each="t, i : ${c.tipos}" th:classappend="${i.first and !ic.first} ? 'nuevo-corte'">
           <td th:if="${i.first}" class="corte" th:rowspan="${c.tipos.size()}" th:text="${c.rotulo}"></td>
           <td th:text="${t.tipo}"></td>
           <td class="centro" th:text="${t.parcial}"></td>
-          <td class="centro" th:text="${c.total}"></td>
+          <td th:if="${i.first}" class="centro" th:rowspan="${c.tipos.size()}" th:text="${c.total}"></td>
         </tr>
       </th:block>
     </table>
 
     <th:block th:case="'BIBLIOGRAFIA'">
-      <p th:each="r : ${s.referencias}" class="referencia" th:classappend="${r.rotulo} ? 'rotulo'"><span
-         th:text="${r.antes}"></span><i th:text="${r.cursiva}"></i><span th:text="${r.despues}"></span></p>
+      <th:block th:each="b : ${s.bloques}" th:switch="${b.forma.name()}">
+        <div th:case="'ESPACIO'" class="espacio"></div>
+        <p th:case="'SUBTITULO'" class="rotulo" th:text="${b.fragmentos[0].texto}"></p>
+        <p th:case="*" class="referencia"><span class="marca"><span class="check">✔</span></span><th:block
+           th:replace="~{::texto(${b.fragmentos})}"></th:block></p>
+      </th:block>
     </th:block>
 
     <th:block th:case="'LINEAS'">
@@ -116,9 +145,21 @@
     </th:block>
 
     <th:block th:case="*">
-      <p th:each="p : ${s.parrafos}" class="parrafo" th:text="${p}"></p>
+      <th:block th:each="b : ${s.bloques}" th:switch="${b.forma.name()}">
+        <div th:case="'ESPACIO'" class="espacio"></div>
+        <p th:case="'VINETA'" class="vineta"><span class="marca"><span class="check">✔</span></span><th:block
+           th:replace="~{::texto(${b.fragmentos})}"></th:block></p>
+        <p th:case="'SUBVINETA'" class="subvineta"><span class="marca circulo">o</span><th:block
+           th:replace="~{::texto(${b.fragmentos})}"></th:block></p>
+        <p th:case="'SUBTITULO'" class="subtitulo" th:text="${b.fragmentos[0].texto}"></p>
+        <p th:case="*" class="parrafo"><th:block th:replace="~{::texto(${b.fragmentos})}"></th:block></p>
+      </th:block>
     </th:block>
   </th:block>
 </div>
+<!-- Texto con **negrita** y *cursiva* (ver TextoConFormato); no se pinta por sí solo. -->
+<th:block th:remove="all"><th:block th:fragment="texto(fragmentos)"><th:block th:each="f : ${fragmentos}"><b
+  th:if="${f.negrita}" th:text="${f.texto}"></b><i th:if="${f.cursiva}" th:text="${f.texto}"></i><span
+  th:unless="${f.negrita or f.cursiva}" th:text="${f.texto}"></span></th:block></th:block></th:block>
 </body>
 </html>

@@ -18,7 +18,7 @@ public final class Evaluacion {
 
     public record Tipo(String tipo, int porcentaje) {}
 
-    private static final int MAX_CORTES = 6;
+    private static final int MAX_CORTES = 3;
     private static final int MAX_TIPOS = 10;
     private static final int MAX_TEXTO = 100;
 

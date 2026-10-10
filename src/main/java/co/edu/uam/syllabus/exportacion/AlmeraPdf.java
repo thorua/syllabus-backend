@@ -5,18 +5,15 @@ import co.edu.uam.syllabus.configuracion.ConfiguracionService;
 import co.edu.uam.syllabus.configuracion.Evaluacion;
 import co.edu.uam.syllabus.exportacion.DocumentoAlmera.Corte;
 import co.edu.uam.syllabus.exportacion.DocumentoAlmera.FilaIdentificacion;
-import co.edu.uam.syllabus.exportacion.DocumentoAlmera.Referencia;
 import co.edu.uam.syllabus.exportacion.DocumentoAlmera.Seccion;
 import co.edu.uam.syllabus.exportacion.DocumentoAlmera.TipoEvaluacion;
 import co.edu.uam.syllabus.syllabus.SyllabusResponse;
 import co.edu.uam.syllabus.syllabus.SyllabusService;
-import com.openhtmltopdf.outputdevice.helper.BaseRendererBuilder.FontStyle;
 import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -25,8 +22,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.function.Function;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import javax.imageio.ImageIO;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -34,9 +29,10 @@ import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
 /**
- * UC17: genera el PDF con el formato estándar Almera, reproduciendo el generador del sistema
- * anterior (pdfGenerator.ts): página Carta, encabezado 3×3, Calibri 11 pt, títulos numerados en
- * Times 12 pt, tabla de identificación, tabla de evaluación con CORTE combinado y bibliografía APA.
+ * UC17: genera el PDF con el formato estándar Almera (GFR-FOR-005) y las medidas del documento
+ * institucional: Carta, encabezado 3×3 con logo, Times New Roman 12 pt en el cuerpo y los títulos,
+ * tabla de identificación, tabla de evaluación en Arial con CORTE y % TOTAL combinados, viñetas y
+ * bibliografía. Times y Arial (Helvetica) son fuentes estándar de PDF: no se incrustan archivos.
  */
 @Component
 public class AlmeraPdf {
@@ -63,16 +59,10 @@ public class AlmeraPdf {
             Map.entry("contents", 8), Map.entry("teaching_strategies", 5), Map.entry(SyllabusService.EVALUACION, 0),
             Map.entry("bibliography", 6));
 
-    private static final Pattern ROTULO_BIBLIOGRAFIA =
-            Pattern.compile("^(Sugerida|Requerida|Complementaria)[\\s:]*$", Pattern.CASE_INSENSITIVE);
-    private static final Pattern ANIO = Pattern.compile("\\(\\d{4}[a-z]?\\)");
-    private static final Pattern FIN_DE_FRASE = Pattern.compile("\\.\\s+");
 
-    /** Caja del logo dentro de su celda (3 filas de 24,2 mm × 54,63 mm), sin tapar los bordes. */
-    private static final double LOGO_ALTO_MAX = 22.5;
-    private static final double LOGO_ANCHO_MAX = 52.0;
-
-    private static final String[] FUENTES = {"calibri.ttf", "calibrib.ttf", "calibrii.ttf"};
+    /** Tamaño del logo en el encabezado del documento institucional (52,94 × 25,18 mm). */
+    private static final double LOGO_ANCHO_MAX = 52.94;
+    private static final double LOGO_ALTO_MAX = 25.18;
 
     private final TemplateEngine plantillas;
     private final ConfiguracionService configuracion;
@@ -99,10 +89,9 @@ public class AlmeraPdf {
             } else if (x.evaluation() != null) {
                 secciones.add(Seccion.evaluacion(numero, titulo, cortes(x.evaluation())));
             } else if ("bibliography".equals(x.sectionType())) {
-                secciones.add(Seccion.bibliografia(numero, titulo,
-                        lineas(x.content()).stream().map(AlmeraPdf::referencia).toList()));
+                secciones.add(Seccion.bibliografia(numero, titulo, TextoConFormato.bibliografia(x.content())));
             } else {
-                secciones.add(Seccion.texto(numero, titulo, lineas(x.content())));
+                secciones.add(Seccion.texto(numero, titulo, TextoConFormato.bloques(x.content())));
             }
         }
         return render(new DocumentoAlmera(encabezado, secciones));
@@ -134,9 +123,6 @@ public class AlmeraPdf {
         try (ByteArrayOutputStream salida = new ByteArrayOutputStream()) {
             PdfRendererBuilder builder = new PdfRendererBuilder();
             builder.useFastMode();
-            builder.useFont(() -> fuente(FUENTES[0]), "Calibri", 400, FontStyle.NORMAL, true);
-            builder.useFont(() -> fuente(FUENTES[1]), "Calibri", 700, FontStyle.NORMAL, true);
-            builder.useFont(() -> fuente(FUENTES[2]), "Calibri", 400, FontStyle.ITALIC, true);
             builder.withHtmlContent(html, null);
             builder.toStream(salida);
             builder.run();
@@ -156,7 +142,7 @@ public class AlmeraPdf {
             ancho = Math.min(LOGO_ANCHO_MAX, LOGO_ALTO_MAX * proporcion);
             alto = ancho / proporcion;
         } catch (IOException | RuntimeException e) {
-            // Si no se puede medir, se usa la caja completa de la celda.
+            // Si no se puede medir, se usa el tamaño del logo institucional.
         }
         String dataUri = "data:" + logo.tipo() + ";base64," + Base64.getEncoder().encodeToString(logo.datos());
         return new DocumentoAlmera.Encabezado(titulo.toUpperCase(Locale.ROOT), codigo, c.documentVersion(), fecha,
@@ -190,35 +176,6 @@ public class AlmeraPdf {
                 .map(c -> new Corte(c.label(), c.porcentaje() + "%", c.tipos().stream()
                         .map(t -> new TipoEvaluacion(t.tipo(), t.porcentaje() + "%")).toList()))
                 .toList();
-    }
-
-    /** Párrafos del texto: una línea por párrafo, sin líneas vacías (como el formato anterior). */
-    private static List<String> lineas(String texto) {
-        if (!StringUtils.hasText(texto)) {
-            return List.of();
-        }
-        return texto.lines().map(String::strip).filter(l -> !l.isEmpty()).toList();
-    }
-
-    /** Separa una referencia APA: autores (año). <i>Título.</i> Fuente. */
-    static Referencia referencia(String entrada) {
-        if (ROTULO_BIBLIOGRAFIA.matcher(entrada).matches()) {
-            return new Referencia(true, entrada.replaceAll(":\\s*$", ""), "", "");
-        }
-        Matcher anio = ANIO.matcher(entrada);
-        if (!anio.find()) {
-            return new Referencia(false, entrada, "", "");
-        }
-        String antes = entrada.substring(0, anio.end());
-        String resto = entrada.substring(anio.end()).replaceFirst("^\\.?\\s*", "");
-        Matcher fin = FIN_DE_FRASE.matcher(resto);
-        String titulo = fin.find() ? resto.substring(0, fin.start() + 1) : resto;
-        String fuente = resto.substring(titulo.length()).strip();
-        return new Referencia(false, antes + ". ", titulo, fuente.isEmpty() ? "" : " " + fuente);
-    }
-
-    private static InputStream fuente(String archivo) {
-        return AlmeraPdf.class.getResourceAsStream("/fonts/" + archivo);
     }
 
     private static String textoO(String valor, String porDefecto) {
