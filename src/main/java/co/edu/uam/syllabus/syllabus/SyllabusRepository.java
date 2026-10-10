@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -19,6 +20,11 @@ public interface SyllabusRepository extends JpaRepository<Syllabus, UUID>, JpaSp
     @EntityGraph(attributePaths = {"asignatura", "asignatura.programa", "asignatura.programa.departamento",
         "asignatura.departamento", "asignatura.profesor", "createdBy"})
     Page<Syllabus> findAll(Specification<Syllabus> spec, Pageable pageable);
+
+    @Override
+    @EntityGraph(attributePaths = {"asignatura", "asignatura.programa", "asignatura.programa.departamento",
+        "asignatura.departamento", "asignatura.profesor", "createdBy"})
+    List<Syllabus> findAll(Specification<Syllabus> spec, Sort sort);
 
     @EntityGraph(attributePaths = {"asignatura", "asignatura.programa", "asignatura.programa.departamento",
         "asignatura.departamento", "asignatura.profesor", "createdBy", "secciones"})

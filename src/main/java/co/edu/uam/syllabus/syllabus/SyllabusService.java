@@ -117,6 +117,29 @@ public class SyllabusService {
                 s -> SyllabusResponse.resumen(s, enAlcance(escritura, s.getAsignatura())));
     }
 
+    /**
+     * UC16: syllabus vigentes (activos) del alcance de lectura que cumplen los filtros, con sus
+     * secciones. Si se indican ids, deben ser todos exportables.
+     */
+    @Transactional(readOnly = true)
+    public List<SyllabusResponse> vigentesParaExportar(UsuarioAutenticado actor, Filtros f, List<UUID> ids) {
+        Filtros activos = new Filtros(null, f.departmentId(), f.programId(), null, f.academicPeriod(),
+                Syllabus.Estado.ACTIVO);
+        Specification<Syllabus> spec = especificacion(activos, scopeService.de(actor.id(), false), null);
+        if (ids != null && !ids.isEmpty()) {
+            spec = spec.and((root, query, cb) -> root.get("id").in(ids));
+        }
+        List<Syllabus> encontrados = syllabus.findAll(spec, Sort.by("asignatura.code", "academicPeriod"));
+        if (ids != null && !ids.isEmpty() && encontrados.size() != Set.copyOf(ids).size()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Algunos syllabus seleccionados no están vigentes o no están dentro de su alcance.");
+        }
+        Alcance escritura = scopeService.de(actor.id(), true);
+        return encontrados.stream()
+                .map(s -> SyllabusResponse.detalle(s, versionActual(s.getId()), enAlcance(escritura, s.getAsignatura())))
+                .toList();
+    }
+
     @Transactional(readOnly = true)
     public List<String> periodos() {
         return syllabus.periodos();

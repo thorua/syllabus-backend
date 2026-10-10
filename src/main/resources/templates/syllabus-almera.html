@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="es">
+<head>
+<meta charset="UTF-8"/>
+<title th:text="${doc.encabezado.titulo}">Syllabus</title>
+<!--
+  Formato estándar Almera (UC17), con las medidas del documento institucional de referencia:
+  Carta, márgenes 30 mm laterales y 25 mm inferior; encabezado y pie a 12,49 mm del borde.
+  El cuerpo empieza a 42,7 mm (encabezado de 24,2 mm + 6 mm de separación). El margen derecho de la
+  página es 24 mm porque la tabla de identificación del formato sobresale 6 mm del margen de 30 mm;
+  el texto conserva los 30 mm con margin-right en párrafos y bibliografía.
+-->
+<style>
+  @page {
+    size: 215.9mm 279.4mm;
+    margin: 42.7mm 24mm 25mm 30mm;
+    @top-center {
+      content: element(encabezado);
+      vertical-align: top;
+      padding-top: 12.49mm;
+    }
+    @bottom-right {
+      content: counter(page);
+      font-family: sans-serif;
+      font-size: 10pt;
+      vertical-align: bottom;
+      padding-bottom: 11.6mm;
+      padding-right: 6mm;
+    }
+  }
+  body { margin: 0; font-family: Calibri, sans-serif; font-size: 11pt; line-height: 1.15; color: #000; }
+  table { border-collapse: collapse; }
+  td, th { border: 0.5pt solid #000; }
+
+  /* Encabezado 3×3 repetido en cada página: 8,09 mm a la izquierda del margen y 180,48 mm de ancho */
+  .encabezado { position: running(encabezado); margin-left: -8.09mm; width: 180.48mm; table-layout: fixed; }
+  .encabezado td { height: 8.06mm; padding: 0; vertical-align: middle; }
+  .encabezado .logo { width: 54.63mm; text-align: center; line-height: 0; }
+  .encabezado .logo img { display: block; margin: 0 auto; }
+  .encabezado .titulo { width: 78.36mm; text-align: center; font-family: sans-serif; font-weight: bold; font-size: 11pt; }
+  .encabezado .dato { width: 47.49mm; padding: 0 1.5mm; font-family: sans-serif; font-size: 9pt; line-height: 1.15; }
+
+  /* Secciones numeradas: «N.» a 6,35 mm y el título a 12,7 mm del margen, Times bold 12 pt */
+  .seccion { margin-bottom: 3.1mm; }
+  .seccion-titulo { margin: 0 0 1.56mm 6.35mm; font-family: serif; font-weight: bold; font-size: 12pt; line-height: 4.46mm; page-break-after: avoid; }
+  .seccion-titulo .numero { display: inline-block; width: 6.35mm; }
+  .parrafo { margin: 0 6mm 2.23mm 12.7mm; text-align: justify; }
+  .parrafo:last-child { margin-bottom: 0; }
+
+  .identificacion { margin-left: 4.92mm; width: 157mm; table-layout: fixed; page-break-inside: avoid; }
+  .identificacion td { padding: 1.6mm 2mm; font-weight: bold; vertical-align: middle; }
+  .identificacion .correo { color: #4F81BD; text-decoration: underline; }
+
+  .evaluacion { margin-left: 6.35mm; width: 140.7mm; table-layout: fixed; page-break-inside: avoid; }
+  .evaluacion th { background: #F2F2F2; font-weight: bold; text-align: center; vertical-align: middle; padding: 2.1mm 1mm; }
+  .evaluacion td { padding: 1.3mm 2mm; vertical-align: middle; }
+  .evaluacion .corte { font-weight: bold; text-align: center; padding: 1mm; }
+  .evaluacion .centro { text-align: center; padding: 1.3mm 1mm; }
+
+  /* Bibliografía APA: sangría francesa de 12,7 mm y título de la obra en cursiva */
+  .referencia { margin: 0 6mm 1.34mm 0; padding-left: 12.7mm; text-indent: -12.7mm; }
+  .referencia.rotulo { font-weight: bold; margin-bottom: 0; }
+
+  .linea { margin-left: 12.7mm; width: 130.5mm; height: 4.46mm; border-bottom: 0.15mm solid #000; }
+</style>
+</head>
+<body>
+<table class="encabezado">
+  <tr>
+    <td class="logo" rowspan="3">
+      <img th:src="${doc.encabezado.logo}" alt="Logo"
+           th:style="'width:' + ${doc.encabezado.logoAnchoMm} + 'mm;height:' + ${doc.encabezado.logoAltoMm} + 'mm'"/>
+    </td>
+    <td class="titulo" rowspan="3" th:text="${doc.encabezado.titulo}">SYLLABUS DE LA ASIGNATURA</td>
+    <td class="dato"><b>CÓDIGO: </b><span th:text="${doc.encabezado.codigo}"></span></td>
+  </tr>
+  <tr><td class="dato"><b>VERSIÓN: </b><span th:text="${doc.encabezado.version}"></span></td></tr>
+  <tr><td class="dato"><b>FECHA ELABORACIÓN DEL DOCUMENTO: </b><span th:text="${doc.encabezado.fecha}"></span></td></tr>
+</table>
+
+<div class="seccion" th:each="s : ${doc.secciones}">
+  <div class="seccion-titulo"><span class="numero" th:text="${s.numero} + '.'">1.</span><span th:text="${s.titulo}"></span></div>
+
+  <th:block th:switch="${s.tipo.name()}">
+    <table th:case="'IDENTIFICACION'" class="identificacion">
+      <tr th:each="f : ${s.filas}">
+        <td style="width: 77.5mm" th:text="${f.rotulo}"></td>
+        <td style="width: 79.5mm" th:classappend="${f.correo} ? 'correo'" th:text="${f.valor}"></td>
+      </tr>
+    </table>
+
+    <table th:case="'EVALUACION'" class="evaluacion">
+      <tr>
+        <th style="width: 19.98mm">CORTE</th>
+        <th style="width: 60.25mm">TIPO DE EVALUACIÓN</th>
+        <th style="width: 42.27mm">% PARCIAL</th>
+        <th style="width: 18.2mm">% TOTAL</th>
+      </tr>
+      <th:block th:each="c : ${s.cortes}">
+        <tr th:each="t, i : ${c.tipos}">
+          <td th:if="${i.first}" class="corte" th:rowspan="${c.tipos.size()}" th:text="${c.rotulo}"></td>
+          <td th:text="${t.tipo}"></td>
+          <td class="centro" th:text="${t.parcial}"></td>
+          <td class="centro" th:text="${c.total}"></td>
+        </tr>
+      </th:block>
+    </table>
+
+    <th:block th:case="'BIBLIOGRAFIA'">
+      <p th:each="r : ${s.referencias}" class="referencia" th:classappend="${r.rotulo} ? 'rotulo'"><span
+         th:text="${r.antes}"></span><i th:text="${r.cursiva}"></i><span th:text="${r.despues}"></span></p>
+    </th:block>
+
+    <th:block th:case="'LINEAS'">
+      <div th:each="n : ${#numbers.sequence(1, s.lineas)}" class="linea"></div>
+    </th:block>
+
+    <th:block th:case="*">
+      <p th:each="p : ${s.parrafos}" class="parrafo" th:text="${p}"></p>
+    </th:block>
+  </th:block>
+</div>
+</body>
+</html>
