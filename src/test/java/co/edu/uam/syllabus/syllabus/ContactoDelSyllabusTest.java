@@ -11,7 +11,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * El syllabus vigente debe tener a quién contactar: el correo de la coordinación del programa o,
- * en programas sin coordinación (posgrados), el docente asignado a la asignatura.
+ * en programas sin coordinación (posgrados), el docente asignado a la asignatura. La identificación
+ * se arma con los datos de la asignatura, por eso puede quedar sin texto en un syllabus activo.
  */
 class ContactoDelSyllabusTest extends PruebaIntegracion {
 
@@ -21,6 +22,7 @@ class ContactoDelSyllabusTest extends PruebaIntegracion {
             {"subjectId": "%s", "academicPeriod": "2026-02", "title": "Seminario de Investigación - 2026-02",
              "status": "%s",
              "sections": [
+               {"sectionType": "identification", "title": "Identificación", "content": ""},
                {"sectionType": "justification", "title": "Justificación", "content": "Texto"},
                {"sectionType": "evaluation", "title": "Evaluación", "evaluation": [
                  {"corte": 1, "label": "I", "porcentaje": 30, "tipos": [{"tipo": "Quiz", "porcentaje": 100}]},
