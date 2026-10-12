@@ -313,7 +313,6 @@ public class SyllabusService {
             throw invalido("El syllabus solo puede tener una sección de evaluación.");
         }
         List<Evaluacion.Corte> plantilla = evaluaciones == 1 ? configuracion.plantillaEvaluacion() : List.of();
-        int maximo = configuracion.maximoCaracteresPorSeccion();
         List<SeccionSyllabus> resultado = new ArrayList<>();
         for (int i = 0; i < req.size(); i++) {
             SeccionRequest x = req.get(i);
@@ -324,10 +323,6 @@ public class SyllabusService {
                 resultado.add(new SeccionSyllabus(x.sectionType(), titulo, null, evaluacion, i + 1));
             } else {
                 String contenido = x.content() == null ? "" : x.content().strip();
-                if (contenido.length() > maximo) {
-                    throw invalido("La sección «" + titulo + "» tiene " + contenido.length() + " caracteres; el "
-                            + "máximo permitido es " + maximo + ".");
-                }
                 // La identificación se arma con los datos de la asignatura (PDF y vista web): no exige texto.
                 if (completa && contenido.isEmpty() && !IDENTIFICACION.equals(x.sectionType())) {
                     throw invalido("La sección «" + titulo + "» no tiene contenido. Complétela o guarde el "

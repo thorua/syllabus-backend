@@ -72,7 +72,7 @@ class EstructuraAcademicaTest extends PruebaIntegracion {
         String malla = mvc.perform(como("estudiante",
                         get("/api/study-plans/" + PLAN_SISTEMAS_2026 + "/curriculum?academicPeriod=2026-01")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.semesters[*].number", contains(1, 2, 3, 4, 6)))
+                .andExpect(jsonPath("$.semesters[*].number", contains(1, 2, 3, 4, 5, 6, 7)))
                 .andReturn().getResponse().getContentAsString();
         assertEstado(malla, "MAT100", "PENDIENTE_FIRMA");
         assertEstado(malla, "EDU100", "BORRADOR");

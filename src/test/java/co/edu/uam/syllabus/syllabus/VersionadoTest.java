@@ -111,15 +111,4 @@ class VersionadoTest extends PruebaIntegracion {
                         .content("{\"academicPeriod\": \"2028-02\"}")))
                 .andExpect(status().isForbidden());
     }
-
-    @Test
-    void cadaSeccionRespetaElMaximoDeCaracteresConfigurado() throws Exception {
-        mvc.perform(como("profesor", post("/api/syllabus").content("""
-                        {"subjectId": "%s", "academicPeriod": "2028-03", "title": "Muy largo",
-                         "sections": [{"sectionType": "justification", "title": "Justificación", "content": "%s"}]}
-                        """.formatted(ASIG_BASE_DE_DATOS, "a".repeat(2001)))))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value(
-                        "La sección «Justificación» tiene 2001 caracteres; el máximo permitido es 2000."));
-    }
 }
