@@ -1,9 +1,11 @@
 package co.edu.uam.syllabus;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -38,13 +40,20 @@ public abstract class PruebaIntegracion {
         POSTGRES.start();
     }
 
-    // Datos demo (db/demo/V3__datos_demo.sql)
+    // Datos demo (db/demo/V3__datos_demo.sql y V11__demo_estructura_academica.sql)
     protected static final UUID BASE_DE_DATOS = UUID.fromString("50000000-0000-0000-0000-000000000001");
     protected static final UUID ING_SOFTWARE = UUID.fromString("50000000-0000-0000-0000-000000000002");
     protected static final UUID ALGORITMOS_BORRADOR = UUID.fromString("50000000-0000-0000-0000-000000000004");
+    protected static final UUID APRENDIZAJE_AUTOMATICO = UUID.fromString("50000000-0000-0000-0000-000000000005");
+    protected static final UUID MATEMATICAS_I = UUID.fromString("50000000-0000-0000-0000-000000000006");
     protected static final UUID ASIG_BASE_DE_DATOS = UUID.fromString("30000000-0000-0000-0000-000000000001");
+    protected static final UUID ASIG_MATEMATICAS_I = UUID.fromString("30000000-0000-0000-0000-000000000009");
+    protected static final UUID DEPTO_COMPUTACIONALES = UUID.fromString("10000000-0000-0000-0000-000000000001");
+    protected static final UUID DEPTO_MATEMATICAS = UUID.fromString("10000000-0000-0000-0000-000000000002");
     protected static final UUID PROGRAMA_SISTEMAS = UUID.fromString("20000000-0000-0000-0000-000000000001");
+    protected static final UUID PROGRAMA_ELECTRONICA = UUID.fromString("20000000-0000-0000-0000-000000000002");
     protected static final UUID PROGRAMA_MAESTRIA_IA = UUID.fromString("20000000-0000-0000-0000-000000000004");
+    protected static final UUID PLAN_SISTEMAS_2026 = UUID.fromString("60000000-0000-0000-0000-000000000003");
 
     @Autowired
     protected MockMvc mvc;
@@ -67,5 +76,12 @@ public abstract class PruebaIntegracion {
             throws Exception {
         return peticion.header(HttpHeaders.AUTHORIZATION, "Bearer " + token(usuario))
                 .contentType(MediaType.APPLICATION_JSON);
+    }
+
+    /** Id de una facultad por su código (las facultades las crea V9__facultades_y_planes_de_estudio.sql). */
+    protected String facultad(String codigo) throws Exception {
+        String json = mvc.perform(como("admin", get("/api/faculties"))).andReturn().getResponse().getContentAsString();
+        List<String> ids = JsonPath.read(json, "$[?(@.code == '" + codigo + "')].id");
+        return ids.getFirst();
     }
 }

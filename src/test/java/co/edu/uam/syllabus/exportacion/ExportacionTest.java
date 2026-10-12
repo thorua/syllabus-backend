@@ -38,18 +38,28 @@ class ExportacionTest extends PruebaIntegracion {
             String texto = texto(documento);
             assertThat(texto)
                     .contains("SYLLABUS DE LA ASIGNATURA", "CÓDIGO: GFR-FOR-005", "VERSIÓN: 6")
-                    .contains("IDENTIFICACIÓN", "Base de Datos I", "coordinacion.sistemas@autonoma.edu.co")
+                    .contains("IDENTIFICACIÓN", "Base de Datos I", "computacion@autonoma.edu.co")
                     .contains("ESTRATEGIA DE EVALUACIÓN DEL APRENDIZAJE", "TIPO DE EVALUACIÓN", "Avance proyecto")
                     .contains("Fundamentals of Database Systems", "Requerida");
         }
     }
 
     @Test
+    void unaAsignaturaDeServicioMuestraSuDepartamentoYTodosLosProgramasQueLaCursan() throws Exception {
+        String texto = textoPdf(mvc.perform(como("coordinador.programa", get("/api/export/syllabus/" + MATEMATICAS_I)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray());
+        assertThat(texto).contains("Departamento de Matemáticas", "Ingeniería de Sistemas", "Ingeniería Electrónica",
+                "Ingeniería Biomédica", "matematicas@autonoma.edu.co");
+    }
+
+    @Test
     void elContactoEsLaCoordinacionYSoloSinCoordinacionElDocente() throws Exception {
-        // Ing. de Sistemas tiene coordinación: «Docente (s)» queda vacío y sale el correo de la coordinación.
+        // Ciencias Computacionales, que ofrece Base de Datos I, tiene coordinación: «Docente (s)» queda
+        // vacío y sale el correo de la coordinación del departamento.
         String pregrado = textoPdf(mvc.perform(como("profesor", get("/api/export/syllabus/" + BASE_DE_DATOS)))
                 .andReturn().getResponse().getContentAsByteArray());
-        assertThat(pregrado).contains("Docente (s) E-mail docente (s) coordinacion.sistemas@autonoma.edu.co")
+        assertThat(pregrado).contains("Docente (s) E-mail docente (s) computacion@autonoma.edu.co")
                 .doesNotContain("profesor@autonoma.edu.co");
 
         // La maestría no tiene coordinación: sale el docente asignado y su correo.

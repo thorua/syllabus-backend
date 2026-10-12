@@ -12,49 +12,65 @@ import org.junit.jupiter.api.Test;
 /** UC5 departamentos, UC6 programas, UC7 asignaturas y UC8 asignar profesor. */
 class CatalogosTest extends PruebaIntegracion {
 
-    private static final String DEPTO_SISTEMAS = "10000000-0000-0000-0000-000000000001";
     private static final String REDES = "30000000-0000-0000-0000-000000000003";
     private static final String PROFESOR = "40000000-0000-0000-0000-000000000001";
     private static final String ESTUDIANTE = "40000000-0000-0000-0000-000000000005";
 
     @Test
     void losCodigosYNombresNoSeRepitenYNoSeDesactivaLoQueTieneDependencias() throws Exception {
+        String facultad = facultad("FING");
+        String departamento = "{\"name\": \"%s\", \"code\": \"%s\", \"facultyId\": \"%s\"}";
         mvc.perform(como("admin", post("/api/departments")
-                        .content("{\"name\": \"departamento de ingeniería de sistemas\", \"code\": \"NUEVO\"}")))
+                        .content(departamento.formatted("departamento de ciencias computacionales", "NUEVO", facultad))))
                 .andExpect(status().isConflict());
-        mvc.perform(como("admin", post("/api/departments").content("{\"name\": \"Otro\", \"code\": \"dis\"}")))
+        mvc.perform(como("admin", post("/api/departments").content(departamento.formatted("Otro", "dcc", facultad))))
                 .andExpect(status().isConflict());
-        mvc.perform(como("admin", delete("/api/departments/" + DEPTO_SISTEMAS)))
+        mvc.perform(como("admin", post("/api/departments").content("{\"name\": \"Sin facultad\", \"code\": \"SF\"}")))
+                .andExpect(status().isBadRequest());
+        mvc.perform(como("admin", delete("/api/departments/" + DEPTO_COMPUTACIONALES)))
                 .andExpect(status().isConflict());
-        mvc.perform(como("coordinador", post("/api/departments").content("{\"name\": \"X\", \"code\": \"X\"}")))
+        mvc.perform(como("coordinador", post("/api/departments")
+                        .content(departamento.formatted("X", "X", facultad))))
                 .andExpect(status().isForbidden());
     }
 
     @Test
-    void elPregradoExigeDepartamentoYElPosgradoNoTiene() throws Exception {
+    void elPregradoExigeDepartamentoYElPosgradoPerteneceAUnaFacultad() throws Exception {
         mvc.perform(como("admin", post("/api/programs")
                         .content("{\"name\": \"Programa sin depto\", \"code\": \"PSD\", \"level\": \"PREGRADO\"}")))
                 .andExpect(status().isBadRequest());
         mvc.perform(como("admin", post("/api/programs").content("""
+                        {"name": "Especialización sin facultad", "code": "ESF", "level": "ESPECIALIZACION"}""")))
+                .andExpect(status().isBadRequest());
+        mvc.perform(como("admin", post("/api/programs").content("""
                         {"name": "Especialización de Prueba", "code": "EPR", "level": "ESPECIALIZACION",
-                         "departmentId": "%s"}""".formatted(DEPTO_SISTEMAS))))
+                         "departmentId": "%s", "facultyId": "%s"}""".formatted(DEPTO_COMPUTACIONALES, facultad("FING")))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.department").doesNotExist())
+                .andExpect(jsonPath("$.faculty.code").value("FING"))
                 .andExpect(jsonPath("$.coordinationEmail").doesNotExist());
     }
 
     @Test
-    void elCorreoDeCoordinacionSeValidaYSeGuardaEnMinusculas() throws Exception {
-        String programa = """
-                {"name": "Pregrado con Coordinación", "code": "%s", "level": "PREGRADO", "departmentId": "%s",
+    void elCorreoDeCoordinacionEsDelDepartamentoOElPosgradoYSeGuardaEnMinusculas() throws Exception {
+        String posgrado = """
+                {"name": "Maestría con Coordinación", "code": "%s", "level": "MAESTRIA", "facultyId": "%s",
                  "coordinationEmail": "%s"}""";
         mvc.perform(como("admin", post("/api/programs")
-                        .content(programa.formatted("PCC1", DEPTO_SISTEMAS, "no-es-correo"))))
+                        .content(posgrado.formatted("MCC1", facultad("FING"), "no-es-correo"))))
                 .andExpect(status().isBadRequest());
         mvc.perform(como("admin", post("/api/programs")
-                        .content(programa.formatted("PCC2", DEPTO_SISTEMAS, "Coordinacion.Prueba@Autonoma.edu.co"))))
+                        .content(posgrado.formatted("MCC2", facultad("FING"), "Coordinacion.Prueba@Autonoma.edu.co"))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.coordinationEmail").value("coordinacion.prueba@autonoma.edu.co"));
+        // En pregrado el contacto es la coordinación del departamento; el programa no guarda correo.
+        mvc.perform(como("admin", post("/api/programs").content("""
+                        {"name": "Pregrado de Prueba", "code": "PPR", "level": "PREGRADO", "departmentId": "%s",
+                         "coordinationEmail": "otro@autonoma.edu.co"}""".formatted(DEPTO_COMPUTACIONALES))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.coordinationEmail").doesNotExist())
+                .andExpect(jsonPath("$.department.coordinationEmail")
+                        .value("computacion@autonoma.edu.co"));
     }
 
     @Test

@@ -3,7 +3,7 @@ package co.edu.uam.syllabus.syllabus;
 import co.edu.uam.syllabus.auditoria.AuditEvent;
 import co.edu.uam.syllabus.catalogos.Asignatura;
 import co.edu.uam.syllabus.catalogos.AsignaturaRepository;
-import co.edu.uam.syllabus.catalogos.Departamento;
+import co.edu.uam.syllabus.catalogos.PlanAsignaturaRepository;
 import co.edu.uam.syllabus.common.PageResponse;
 import co.edu.uam.syllabus.common.security.Alcance;
 import co.edu.uam.syllabus.common.security.ScopeService;
@@ -12,13 +12,14 @@ import co.edu.uam.syllabus.configuracion.ConfiguracionService;
 import co.edu.uam.syllabus.configuracion.Evaluacion;
 import co.edu.uam.syllabus.syllabus.versionado.VersionResponse;
 import co.edu.uam.syllabus.syllabus.versionado.VersionSyllabus;
+import co.edu.uam.syllabus.syllabus.firma.FirmaSyllabusRepository;
+import co.edu.uam.syllabus.syllabus.firma.Verificacion;
 import co.edu.uam.syllabus.syllabus.versionado.VersionadoService;
 import co.edu.uam.syllabus.usuarios.Usuario;
 import co.edu.uam.syllabus.usuarios.UsuarioRepository;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Join;
-import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -27,6 +28,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -43,7 +45,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 /**
  * UC10 consultar, UC11 crear, UC12 editar, UC13 eliminar (lógico) y UC14 historial de syllabus.
- * Cada creación, edición o desactivación registra una versión inmutable (UC22).
+ * Cada creación, edición o desactivación registra una versión inmutable (UC22). Renovar copia un
+ * syllabus a otro período sin ajustes y deja ese registro en el historial (guía GFR-GUI-031).
  */
 @Service
 public class SyllabusService {
@@ -58,17 +61,22 @@ public class SyllabusService {
     private final SyllabusRepository syllabus;
     private final VersionadoService versionado;
     private final AsignaturaRepository asignaturas;
+    private final PlanAsignaturaRepository planes;
+    private final FirmaSyllabusRepository firmas;
     private final UsuarioRepository usuarios;
     private final ScopeService scopeService;
     private final ConfiguracionService configuracion;
     private final ApplicationEventPublisher eventos;
 
     public SyllabusService(SyllabusRepository syllabus, VersionadoService versionado,
-                           AsignaturaRepository asignaturas, UsuarioRepository usuarios, ScopeService scopeService,
+                           AsignaturaRepository asignaturas, PlanAsignaturaRepository planes,
+                           FirmaSyllabusRepository firmas, UsuarioRepository usuarios, ScopeService scopeService,
                            ConfiguracionService configuracion, ApplicationEventPublisher eventos) {
         this.syllabus = syllabus;
         this.versionado = versionado;
         this.asignaturas = asignaturas;
+        this.planes = planes;
+        this.firmas = firmas;
         this.usuarios = usuarios;
         this.scopeService = scopeService;
         this.configuracion = configuracion;
@@ -103,6 +111,11 @@ public class SyllabusService {
             /** Versión sobre la que se editó; si cambió entretanto, se rechaza para no pisar cambios ajenos. */
             Integer baseVersion) {}
 
+    public record RenovarRequest(
+            @NotBlank @Pattern(regexp = "\\d{4}-0[1-3]", message = "Use el formato AAAA-01, AAAA-02 o AAAA-03.")
+            String academicPeriod) {}
+
+    /** departmentId: departamento que ofrece la asignatura; programId: programa en cuya malla está. */
     public record Filtros(String search, UUID departmentId, UUID programId, UUID subjectId, String academicPeriod,
                           Syllabus.Estado status) {}
 
@@ -116,9 +129,13 @@ public class SyllabusService {
         Alcance escritura = scopeService.de(actor.id(), true);
         var pagina = PageRequest.of(Math.max(page, 1) - 1, Math.clamp(limit, 1, 100),
                 Sort.by(Sort.Direction.DESC, "updatedAt"));
-        var spec = especificacion(f, lectura, puedeEditar(actor) ? escritura : null);
-        return PageResponse.of(syllabus.findAll(spec, pagina),
-                s -> SyllabusResponse.resumen(s, enAlcance(escritura, s.getAsignatura())));
+        var spec = especificacion(f, delPrograma(f), lectura, puedeEditar(actor) ? escritura : null);
+        var encontrados = syllabus.findAll(spec, pagina);
+        Map<UUID, Verificacion.Estado> verificacion = verificaciones(
+                encontrados.getContent().stream().map(Syllabus::getId).toList());
+        return PageResponse.of(encontrados, s -> SyllabusResponse.resumen(s,
+                verificacion.getOrDefault(s.getId(), Verificacion.Estado.SIN_FIRMAS),
+                escritura.incluyeAsignatura(s.getAsignatura().getId())));
     }
 
     /**
@@ -129,7 +146,8 @@ public class SyllabusService {
     public List<SyllabusResponse> vigentesParaExportar(UsuarioAutenticado actor, Filtros f, List<UUID> ids) {
         Filtros activos = new Filtros(null, f.departmentId(), f.programId(), null, f.academicPeriod(),
                 Syllabus.Estado.ACTIVO);
-        Specification<Syllabus> spec = especificacion(activos, scopeService.de(actor.id(), false), null);
+        Specification<Syllabus> spec = especificacion(activos, delPrograma(activos), scopeService.de(actor.id(), false),
+                null);
         if (ids != null && !ids.isEmpty()) {
             spec = spec.and((root, query, cb) -> root.get("id").in(ids));
         }
@@ -139,10 +157,7 @@ public class SyllabusService {
                     "Algunos syllabus seleccionados no están vigentes o no están dentro de su alcance.");
         }
         Alcance escritura = scopeService.de(actor.id(), true);
-        return encontrados.stream()
-                .map(s -> SyllabusResponse.detalle(s, versionado.actual(s.getId()),
-                        enAlcance(escritura, s.getAsignatura())))
-                .toList();
+        return encontrados.stream().map(s -> detalle(s, escritura)).toList();
     }
 
     @Transactional(readOnly = true)
@@ -155,9 +170,9 @@ public class SyllabusService {
         Alcance escritura = scopeService.de(actor.id(), true);
         Syllabus s = syllabus.findDetalleById(id)
                 .filter(x -> x.getStatus() == Syllabus.Estado.ACTIVO
-                        || (puedeEditar(actor) && enAlcance(escritura, x.getAsignatura())))
+                        || (puedeEditar(actor) && escritura.incluyeAsignatura(x.getAsignatura().getId())))
                 .orElseThrow(SyllabusService::noEncontrado);
-        return SyllabusResponse.detalle(s, versionado.actual(id), enAlcance(escritura, s.getAsignatura()));
+        return detalle(s, escritura);
     }
 
     @Transactional
@@ -167,7 +182,7 @@ public class SyllabusService {
         if (!a.isActive()) {
             throw invalido("La asignatura seleccionada está inactiva.");
         }
-        if (!enAlcance(scopeService.de(actor.id(), true), a)) {
+        if (!scopeService.de(actor.id(), true).incluyeAsignatura(a.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Solo puede crear syllabus de las asignaturas a su cargo.");
         }
@@ -190,7 +205,48 @@ public class SyllabusService {
 
         int version = versionado.registrar(s, "Creación del syllabus", autor);
         publicar(actor, "CREATE", s, version);
-        return SyllabusResponse.detalle(s, version, true);
+        return respuesta(s, version);
+    }
+
+    /**
+     * Copia el syllabus a otro período tal como está: el historial del nuevo registra que no tuvo
+     * ajustes respecto al período de origen (guía GFR-GUI-031, actividades 3 y 7). Si queda activo,
+     * debe cumplir las reglas vigentes (evaluación, contacto, longitud).
+     */
+    @Transactional
+    public SyllabusResponse renovar(UsuarioAutenticado actor, UUID id, RenovarRequest req) {
+        Syllabus origen = syllabus.findDetalleById(id).orElseThrow(SyllabusService::noEncontrado);
+        Asignatura a = origen.getAsignatura();
+        String periodo = req.academicPeriod().trim();
+        if (origen.getStatus() == Syllabus.Estado.INACTIVO) {
+            throw invalido("No se puede renovar un syllabus inactivo.");
+        }
+        if (periodo.equals(origen.getAcademicPeriod())) {
+            throw invalido("Elija un período distinto al del syllabus de origen.");
+        }
+        if (syllabus.existsByAsignaturaIdAndAcademicPeriod(a.getId(), periodo)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Ya existe un syllabus de " + a.getName() + " para el período " + periodo + ".");
+        }
+        Usuario autor = usuarios.getReferenceById(actor.id());
+        Syllabus s = new Syllabus(a, periodo, autor);
+        s.setTitle(origen.getTitle().replace(origen.getAcademicPeriod(), periodo));
+        s.setStatus(origen.getStatus());
+        s.setHeaderTitle(origen.getHeaderTitle());
+        s.setDocumentCode(origen.getDocumentCode());
+        s.setDocumentDate(origen.getDocumentDate());
+        s.reemplazarSecciones(secciones(origen.getSecciones().stream()
+                .map(x -> new SeccionRequest(x.getSectionType(), x.getTitle(), x.getContent(), x.getEvaluation()))
+                .toList(), s.getStatus()));
+        validarContacto(s);
+        syllabus.saveAndFlush(s);
+
+        int version = versionado.registrar(s, "Renovado sin ajustes respecto al período "
+                + origen.getAcademicPeriod(), autor);
+        eventos.publishEvent(AuditEvent.de(actor.id(), "CREATE", ENTIDAD, s.getId()).con(Map.of(
+                "title", s.getTitle(), "academicPeriod", periodo, "status", s.getStatus().name(),
+                "versionNumber", version, "renewedFrom", origen.getAcademicPeriod())));
+        return respuesta(s, version);
     }
 
     /** UC12: cada guardado con cambios genera una versión nueva (UC22). */
@@ -221,7 +277,7 @@ public class SyllabusService {
 
         int version = versionado.registrar(s, req.changeDescription().trim(), usuarios.getReferenceById(actor.id()));
         publicar(actor, "UPDATE", s, version);
-        return SyllabusResponse.detalle(s, version, true);
+        return respuesta(s, version);
     }
 
     /** UC13: borrado lógico; el historial se conserva y la desactivación queda como versión. */
@@ -257,6 +313,7 @@ public class SyllabusService {
             throw invalido("El syllabus solo puede tener una sección de evaluación.");
         }
         List<Evaluacion.Corte> plantilla = evaluaciones == 1 ? configuracion.plantillaEvaluacion() : List.of();
+        int maximo = configuracion.maximoCaracteresPorSeccion();
         List<SeccionSyllabus> resultado = new ArrayList<>();
         for (int i = 0; i < req.size(); i++) {
             SeccionRequest x = req.get(i);
@@ -267,6 +324,10 @@ public class SyllabusService {
                 resultado.add(new SeccionSyllabus(x.sectionType(), titulo, null, evaluacion, i + 1));
             } else {
                 String contenido = x.content() == null ? "" : x.content().strip();
+                if (contenido.length() > maximo) {
+                    throw invalido("La sección «" + titulo + "» tiene " + contenido.length() + " caracteres; el "
+                            + "máximo permitido es " + maximo + ".");
+                }
                 // La identificación se arma con los datos de la asignatura (PDF y vista web): no exige texto.
                 if (completa && contenido.isEmpty() && !IDENTIFICACION.equals(x.sectionType())) {
                     throw invalido("La sección «" + titulo + "» no tiene contenido. Complétela o guarde el "
@@ -279,15 +340,14 @@ public class SyllabusService {
     }
 
     /**
-     * El syllabus vigente debe tener a quién contactar: el correo de la coordinación del programa o,
-     * si el programa no tiene coordinación (p. ej. posgrados), el docente asignado a la asignatura.
+     * El syllabus vigente debe tener a quién contactar: el correo de la coordinación que ofrece la
+     * asignatura (departamento o programa de posgrado) o, si no tiene, el docente asignado.
      */
     private static void validarContacto(Syllabus s) {
         Asignatura a = s.getAsignatura();
-        if (s.getStatus() == Syllabus.Estado.ACTIVO && a.getPrograma().getCoordinationEmail() == null
-                && a.getProfesor() == null) {
-            throw invalido("El programa " + a.getPrograma().getName() + " no tiene correo de coordinación: asigne "
-                    + "un docente a la asignatura antes de activar el syllabus.");
+        if (s.getStatus() == Syllabus.Estado.ACTIVO && a.coordinationEmail() == null && a.getProfesor() == null) {
+            throw invalido(a.responsable() + " no tiene correo de coordinación: asigne un docente a la asignatura "
+                    + "antes de activar el syllabus.");
         }
     }
 
@@ -324,9 +384,38 @@ public class SyllabusService {
         return actor.permisos().contains("syllabus:update");
     }
 
-    private static boolean enAlcance(Alcance alcance, Asignatura a) {
-        Departamento d = a.getDepartamento();
-        return alcance.incluyeAsignatura(a.getId(), a.getPrograma().getId(), d == null ? null : d.getId());
+    private SyllabusResponse detalle(Syllabus s, Alcance escritura) {
+        int version = versionado.actual(s.getId());
+        return SyllabusResponse.detalle(s, version, verificacion(s.getId(), version),
+                planes.deAsignaturas(List.of(s.getAsignatura().getId())),
+                escritura.incluyeAsignatura(s.getAsignatura().getId()));
+    }
+
+    /** Respuesta tras crear o editar: la versión nueva aún no tiene firmas. */
+    private SyllabusResponse respuesta(Syllabus s, int version) {
+        return SyllabusResponse.detalle(s, version, Verificacion.Estado.SIN_FIRMAS,
+                planes.deAsignaturas(List.of(s.getAsignatura().getId())), true);
+    }
+
+    private Verificacion.Estado verificacion(UUID id, int version) {
+        return Verificacion.estado(firmas.pasosFirmados(id, version));
+    }
+
+    /** Estado de verificación de la versión actual de cada syllabus. */
+    private Map<UUID, Verificacion.Estado> verificaciones(List<UUID> ids) {
+        Map<UUID, List<String>> pasos = new HashMap<>();
+        if (!ids.isEmpty()) {
+            for (Object[] fila : firmas.pasosDeVersionActual(ids)) {
+                pasos.computeIfAbsent((UUID) fila[0], k -> new ArrayList<>()).add((String) fila[1]);
+            }
+        }
+        Map<UUID, Verificacion.Estado> estados = new HashMap<>();
+        pasos.forEach((id, p) -> estados.put(id, Verificacion.estado(p)));
+        return estados;
+    }
+
+    private Set<UUID> delPrograma(Filtros f) {
+        return f.programId() == null ? null : planes.asignaturasDelPrograma(f.programId());
     }
 
     private void publicar(UsuarioAutenticado actor, String accion, Syllabus s, int version) {
@@ -337,13 +426,13 @@ public class SyllabusService {
                 "versionNumber", version)));
     }
 
-    private static Specification<Syllabus> especificacion(Filtros f, Alcance lectura, Alcance edicion) {
+    private static Specification<Syllabus> especificacion(Filtros f, Set<UUID> delPrograma, Alcance lectura,
+                                                          Alcance edicion) {
         return (root, query, cb) -> {
             Join<Syllabus, Asignatura> a = root.join("asignatura");
-            Join<Asignatura, Departamento> depto = a.join("departamento", JoinType.LEFT);
             List<Predicate> p = new ArrayList<>();
-            if (f.departmentId() != null) p.add(cb.equal(depto.get("id"), f.departmentId()));
-            if (f.programId() != null) p.add(cb.equal(a.get("programa").get("id"), f.programId()));
+            if (f.departmentId() != null) p.add(cb.equal(a.get("departamento").get("id"), f.departmentId()));
+            if (delPrograma != null) p.add(en(cb, a.get("id"), delPrograma));
             if (f.subjectId() != null) p.add(cb.equal(a.get("id"), f.subjectId()));
             if (StringUtils.hasText(f.academicPeriod())) {
                 p.add(cb.equal(root.get("academicPeriod"), f.academicPeriod()));
@@ -356,24 +445,16 @@ public class SyllabusService {
                         cb.like(cb.lower(a.get("code")), patron)));
             }
             if (!lectura.total()) {
-                p.add(alcance(cb, a, depto, lectura));
+                p.add(en(cb, a.get("id"), lectura.subjectIds()));
             }
             Predicate vigente = cb.equal(root.get("status"), Syllabus.Estado.ACTIVO);
             if (edicion == null) {
                 p.add(vigente);
             } else if (!edicion.total()) {
-                p.add(cb.or(vigente, alcance(cb, a, depto, edicion)));
+                p.add(cb.or(vigente, en(cb, a.get("id"), edicion.subjectIds())));
             }
             return cb.and(p.toArray(Predicate[]::new));
         };
-    }
-
-    private static Predicate alcance(CriteriaBuilder cb, Join<Syllabus, Asignatura> a,
-                                     Join<Asignatura, Departamento> depto, Alcance alcance) {
-        return cb.or(
-                en(cb, a.get("id"), alcance.subjectIds()),
-                en(cb, a.get("programa").get("id"), alcance.programIds()),
-                en(cb, depto.get("id"), alcance.departmentIds()));
     }
 
     private static Predicate en(CriteriaBuilder cb, Expression<UUID> campo, Set<UUID> ids) {

@@ -18,7 +18,9 @@ class AuditoriaTest extends PruebaIntegracion {
     @Test
     void registraLosCambiosYLosIntentosFallidos() throws Exception {
         mvc.perform(como("admin", post("/api/departments")
-                        .content("{\"name\": \"Departamento Auditado\", \"code\": \"AUD\"}")))
+                        .content("""
+                                {"name": "Departamento Auditado", "code": "AUD", "facultyId": "%s"}"""
+                                .formatted(facultad("FING")))))
                 .andExpect(status().isCreated());
         mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"profesor@autonoma.edu.co\",\"password\":\"mala\"}"))

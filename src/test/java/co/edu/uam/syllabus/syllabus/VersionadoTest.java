@@ -91,4 +91,35 @@ class VersionadoTest extends PruebaIntegracion {
                 .andExpect(jsonPath("$.error").value(
                         "I: los porcentajes parciales suman 50 % y deben sumar 100 %."));
     }
+
+    @Test
+    void renovarSinAjustesCopiaElSyllabusYLoDejaEnElHistorial() throws Exception {
+        String renovado = mvc.perform(como("profesor", post("/api/syllabus/" + BASE_DE_DATOS + "/renew")
+                        .content("{\"academicPeriod\": \"2028-01\"}")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.academicPeriod").value("2028-01"))
+                .andExpect(jsonPath("$.title").value("Syllabus Base de Datos I - 2028-01"))
+                .andExpect(jsonPath("$.status").value("ACTIVO"))
+                .andExpect(jsonPath("$.currentVersion").value(1))
+                .andReturn().getResponse().getContentAsString();
+        mvc.perform(como("profesor", get("/api/syllabus/" + JsonPath.read(renovado, "$.id") + "/versions")))
+                .andExpect(jsonPath("$[0].changeDescription").value("Renovado sin ajustes respecto al período 2026-01"));
+        mvc.perform(como("profesor", post("/api/syllabus/" + BASE_DE_DATOS + "/renew")
+                        .content("{\"academicPeriod\": \"2028-01\"}")))
+                .andExpect(status().isConflict());
+        mvc.perform(como("estudiante", post("/api/syllabus/" + BASE_DE_DATOS + "/renew")
+                        .content("{\"academicPeriod\": \"2028-02\"}")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void cadaSeccionRespetaElMaximoDeCaracteresConfigurado() throws Exception {
+        mvc.perform(como("profesor", post("/api/syllabus").content("""
+                        {"subjectId": "%s", "academicPeriod": "2028-03", "title": "Muy largo",
+                         "sections": [{"sectionType": "justification", "title": "Justificación", "content": "%s"}]}
+                        """.formatted(ASIG_BASE_DE_DATOS, "a".repeat(2001)))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(
+                        "La sección «Justificación» tiene 2001 caracteres; el máximo permitido es 2000."));
+    }
 }

@@ -84,6 +84,11 @@
   .referencia { margin: 0 0 0.6mm 12.7mm; }
 
   .linea { margin-left: 6.35mm; height: 5.6mm; border-bottom: 0.15mm solid #000; }
+  /* Casillas de firma digital: el sello visible de cada firma se dibuja sobre el espacio en blanco. */
+  .firmas { margin: 8mm 0 0 4.92mm; width: 157.01mm; border-collapse: collapse; page-break-inside: avoid; }
+  .firmas td { width: 50%; border: 0.5pt solid #000; padding: 1.5mm; vertical-align: bottom;
+               font-family: sans-serif; font-size: 8pt; }
+  .firmas .espacio-firma { height: 24mm; }
 </style>
 </head>
 <body>
@@ -157,6 +162,10 @@
     </th:block>
   </th:block>
 </div>
+<table class="firmas" th:unless="${#lists.isEmpty(doc.firmas)}">
+  <tr><td th:each="f : ${doc.firmas}"><div class="espacio-firma"></div><b th:text="${f.rotulo}"></b><br/><span
+      th:text="${f.cargo}"></span></td></tr>
+</table>
 <!-- Texto con **negrita** y *cursiva* (ver TextoConFormato); no se pinta por sí solo. -->
 <th:block th:remove="all"><th:block th:fragment="texto(fragmentos)"><th:block th:each="f : ${fragmentos}"><b
   th:if="${f.negrita}" th:text="${f.texto}"></b><i th:if="${f.cursiva}" th:text="${f.texto}"></i><span

@@ -22,17 +22,17 @@ public class Asignatura extends BaseEntity {
     @Column(nullable = false)
     private int credits;
 
-    @Column(nullable = false)
-    private int semester;
-
-    @ManyToOne(optional = false)
-    @JoinColumn(name = "program_id")
-    private Programa programa;
-
-    /** Nulo en posgrado: hereda la regla de su programa. */
+    /**
+     * Dueño de la asignatura: el departamento que la ofrece o, en posgrado, su programa (nunca ambos).
+     * Los programas en que se cursa y su semestre salen de los planes de estudio.
+     */
     @ManyToOne
     @JoinColumn(name = "department_id")
     private Departamento departamento;
+
+    @ManyToOne
+    @JoinColumn(name = "program_id")
+    private Programa programa;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "professor_id")
@@ -79,14 +79,7 @@ public class Asignatura extends BaseEntity {
         this.credits = credits;
     }
 
-    public int getSemester() {
-        return semester;
-    }
-
-    public void setSemester(int semester) {
-        this.semester = semester;
-    }
-
+    /** Programa de posgrado dueño de la asignatura; nulo si la ofrece un departamento. */
     public Programa getPrograma() {
         return programa;
     }
@@ -149,6 +142,16 @@ public class Asignatura extends BaseEntity {
 
     public void setPrerequisites(String prerequisites) {
         this.prerequisites = prerequisites;
+    }
+
+    /** Correo de la coordinación responsable: la del departamento o la del programa de posgrado. */
+    public String coordinationEmail() {
+        return departamento != null ? departamento.getCoordinationEmail() : programa.getCoordinationEmail();
+    }
+
+    /** Nombre del responsable de la asignatura, para los mensajes. */
+    public String responsable() {
+        return departamento != null ? departamento.getName() : programa.getName();
     }
 
     public boolean isActive() {

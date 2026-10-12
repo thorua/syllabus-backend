@@ -75,6 +75,15 @@ public class SyllabusController {
         return service.actualizar(actor, id, request);
     }
 
+    /** Copia el syllabus a otro período sin ajustes (guía GFR-GUI-031); queda registrado en su historial. */
+    @PostMapping("/{id}/renew")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAuthority('syllabus:create') and @permisos.puede(authentication, 'syllabus:update', #id)")
+    public SyllabusResponse renovar(@AuthenticationPrincipal UsuarioAutenticado actor, @PathVariable UUID id,
+                                    @Valid @RequestBody SyllabusService.RenovarRequest request) {
+        return service.renovar(actor, id, request);
+    }
+
     @DeleteMapping("/{id}")
     @PreAuthorize("@permisos.puede(authentication, 'syllabus:delete', #id)")
     public Map<String, String> desactivar(@AuthenticationPrincipal UsuarioAutenticado actor, @PathVariable UUID id) {

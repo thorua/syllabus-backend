@@ -3,7 +3,7 @@ package co.edu.uam.syllabus.exportacion;
 import java.util.List;
 
 /** Contenido ya resuelto que pinta la plantilla templates/syllabus-almera.html (UC17). */
-public record DocumentoAlmera(Encabezado encabezado, List<Seccion> secciones) {
+public record DocumentoAlmera(Encabezado encabezado, List<Seccion> secciones, List<CasillaFirma> firmas) {
 
     /** Encabezado 3×3: logo, título y CÓDIGO / VERSIÓN / FECHA. El logo es un data URI. */
     public record Encabezado(String titulo, String codigo, String version, String fecha, String logo,
@@ -49,4 +49,7 @@ public record DocumentoAlmera(Encabezado encabezado, List<Seccion> secciones) {
     public record Corte(String rotulo, String total, List<TipoEvaluacion> tipos) {}
 
     public record TipoEvaluacion(String tipo, String parcial) {}
+
+    /** Casilla de firma digital al final del documento: el rótulo la ubica al firmar. */
+    public record CasillaFirma(String rotulo, String cargo) {}
 }

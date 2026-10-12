@@ -1,5 +1,6 @@
 package co.edu.uam.syllabus.exportacion;
 
+import co.edu.uam.syllabus.catalogos.AsignaturaResponse;
 import co.edu.uam.syllabus.configuracion.Configuracion;
 import co.edu.uam.syllabus.configuracion.ConfiguracionService;
 import co.edu.uam.syllabus.configuracion.Evaluacion;
@@ -73,6 +74,11 @@ public class AlmeraPdf {
     }
 
     public byte[] syllabus(SyllabusResponse s) {
+        return syllabus(s, List.of());
+    }
+
+    /** Documento para firmar: igual al exportado, con las casillas de firma digital al final. */
+    public byte[] syllabus(SyllabusResponse s, List<DocumentoAlmera.CasillaFirma> firmas) {
         Configuracion c = configuracion.obtener();
         DocumentoAlmera.Encabezado encabezado = encabezado(c,
                 textoO(s.headerTitle(), c.syllabusHeader()),
@@ -94,7 +100,7 @@ public class AlmeraPdf {
                 secciones.add(Seccion.texto(numero, titulo, TextoConFormato.bloques(x.content())));
             }
         }
-        return render(new DocumentoAlmera(encabezado, secciones));
+        return render(new DocumentoAlmera(encabezado, secciones, firmas));
     }
 
     /** Plantilla en blanco con el formato vigente, para diligenciar a mano. */
@@ -114,7 +120,7 @@ public class AlmeraPdf {
                 secciones.add(Seccion.lineas(numero, titulo, entrada.getValue()));
             }
         }
-        return render(new DocumentoAlmera(encabezado, secciones));
+        return render(new DocumentoAlmera(encabezado, secciones, List.of()));
     }
 
     private byte[] render(DocumentoAlmera documento) {
@@ -150,19 +156,20 @@ public class AlmeraPdf {
     }
 
     /**
-     * Tabla de identificación. Si el programa tiene coordinación, «Docente (s)» queda vacío y el correo
-     * es el de la coordinación; si no (p. ej. posgrados), se muestran el docente asignado y su correo.
+     * Tabla de identificación. Si quien ofrece la asignatura (departamento o programa de posgrado)
+     * tiene correo de coordinación, «Docente (s)» queda vacío y el correo es el de la coordinación;
+     * si no, se muestran el docente asignado y su correo. Los programas son los de sus planes de estudio.
      */
     private static List<FilaIdentificacion> identificacion(SyllabusResponse s) {
         SyllabusResponse.Materia m = s.subject();
-        String coordinacion = m.program().coordinationEmail();
+        String coordinacion = m.coordinationEmail();
         String docente = coordinacion != null ? "" : m.professor() == null ? "Por asignar" : m.professor().name();
         String correo = coordinacion != null ? coordinacion : m.professor() == null ? "" : m.professor().email();
         Function<Integer, String> horas = h -> h == null ? "—" : String.valueOf(h);
         List<String> valores = List.of(
                 m.name(), m.code(),
                 m.department() == null ? "No aplica (posgrado)" : m.department().name(),
-                m.program().name(),
+                programas(m),
                 textoO(m.modality(), "Presencial"),
                 String.valueOf(m.credits()),
                 horas.apply(m.hoursPresencial()), horas.apply(m.hoursDirigido()), horas.apply(m.hoursIndependiente()),
@@ -174,6 +181,19 @@ public class AlmeraPdf {
             filas.add(new FilaIdentificacion(ROTULOS_IDENTIFICACION.get(i), valores.get(i), esCorreo));
         }
         return filas;
+    }
+
+    /** Programas en cuyos planes vigentes está la asignatura (o su programa de posgrado), sin repetir. */
+    private static String programas(SyllabusResponse.Materia m) {
+        List<String> nombres = m.programs() == null ? List.of() : m.programs().stream()
+                .filter(AsignaturaResponse.EnPlan::planActive)
+                .map(AsignaturaResponse.EnPlan::name)
+                .distinct()
+                .toList();
+        if (nombres.isEmpty()) {
+            return m.program() != null ? m.program().name() : "";
+        }
+        return String.join(", ", nombres);
     }
 
     private static List<Corte> cortes(List<Evaluacion.Corte> evaluacion) {

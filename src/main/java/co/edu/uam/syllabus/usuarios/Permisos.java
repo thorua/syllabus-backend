@@ -20,6 +20,7 @@ public final class Permisos {
         c.put("syllabus:versions", "Consultar historial de versiones");
         c.put("syllabus:export", "Exportar syllabus en PDF");
         c.put("syllabus:header", "Editar encabezado del syllabus");
+        c.put("syllabus:sign", "Firmar digitalmente syllabus (según su cargo)");
         c.put("export:batch", "Exportar syllabus por lote");
         c.put("subject:read", "Consultar asignaturas");
         c.put("subject:create", "Crear asignaturas");
@@ -30,6 +31,11 @@ public final class Permisos {
         c.put("program:create", "Crear programas");
         c.put("program:update", "Editar programas");
         c.put("program:delete", "Desactivar programas");
+        c.put("plan:manage", "Gestionar planes de estudio");
+        c.put("faculty:read", "Consultar facultades");
+        c.put("faculty:create", "Crear facultades");
+        c.put("faculty:update", "Editar facultades");
+        c.put("faculty:delete", "Desactivar facultades");
         c.put("department:read", "Consultar departamentos");
         c.put("department:create", "Crear departamentos");
         c.put("department:update", "Editar departamentos");

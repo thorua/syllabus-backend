@@ -7,15 +7,15 @@ import java.util.UUID;
 /** programCount y subjectCount solo se incluyen en el listado de departamentos. */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record DepartamentoResponse(
-        UUID id, String name, String code, boolean isActive, Instant createdAt, Instant updatedAt,
-        Long programCount, Long subjectCount) {
+        UUID id, String name, String code, FacultadResponse faculty, String coordinationEmail, boolean isActive,
+        Instant createdAt, Instant updatedAt, Long programCount, Long subjectCount) {
 
     public static DepartamentoResponse from(Departamento d) {
         return d == null ? null : conConteos(d, null, null);
     }
 
     static DepartamentoResponse conConteos(Departamento d, Long programas, Long asignaturas) {
-        return new DepartamentoResponse(d.getId(), d.getName(), d.getCode(), d.isActive(),
-                d.getCreatedAt(), d.getUpdatedAt(), programas, asignaturas);
+        return new DepartamentoResponse(d.getId(), d.getName(), d.getCode(), FacultadResponse.from(d.getFacultad()),
+                d.getCoordinationEmail(), d.isActive(), d.getCreatedAt(), d.getUpdatedAt(), programas, asignaturas);
     }
 }

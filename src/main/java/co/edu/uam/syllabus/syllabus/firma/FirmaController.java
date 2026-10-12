@@ -1,0 +1,83 @@
+package co.edu.uam.syllabus.syllabus.firma;
+
+import co.edu.uam.syllabus.common.security.UsuarioAutenticado;
+import java.util.Map;
+import java.util.UUID;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+/**
+ * Aprobación del syllabus con firma digital y certificado de firma registrado por el usuario.
+ * Quién firma cada paso lo decide {@link FirmaService} según el cargo y la afiliación.
+ */
+@RestController
+public class FirmaController {
+
+    private final FirmaService service;
+
+    public FirmaController(FirmaService service) {
+        this.service = service;
+    }
+
+    @GetMapping("/api/syllabus/{id}/signatures")
+    @PreAuthorize("@permisos.puede(authentication, 'syllabus:read', #id)")
+    public FirmaService.FirmasResponse estado(@AuthenticationPrincipal UsuarioAutenticado actor, @PathVariable UUID id) {
+        return service.estado(actor, id);
+    }
+
+    /** El PDF se muestra en el navegador (inline) para revisarlo antes de firmar. */
+    @GetMapping("/api/syllabus/{id}/signatures/preview")
+    @PreAuthorize("hasAuthority('syllabus:sign')")
+    public ResponseEntity<byte[]> vistaPrevia(@AuthenticationPrincipal UsuarioAutenticado actor,
+                                              @PathVariable UUID id) {
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
+                .body(service.vistaPrevia(actor, id));
+    }
+
+    @PostMapping(path = "/api/syllabus/{id}/signatures", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('syllabus:sign')")
+    public FirmaService.FirmasResponse firmar(@AuthenticationPrincipal UsuarioAutenticado actor,
+                                              @PathVariable UUID id,
+                                              @RequestParam int version,
+                                              @RequestParam String password,
+                                              @RequestParam(required = false) MultipartFile certificate,
+                                              @RequestParam(defaultValue = "false") boolean remember) {
+        return service.firmar(actor, id, version, password, certificate, remember);
+    }
+
+    @GetMapping("/api/auth/me/certificate")
+    @PreAuthorize("hasAuthority('syllabus:sign')")
+    public ResponseEntity<FirmaService.CertificadoResponse> certificado(
+            @AuthenticationPrincipal UsuarioAutenticado actor) {
+        return service.certificadoGuardado(actor.id()).map(ResponseEntity::ok)
+                .orElse(ResponseEntity.noContent().build());
+    }
+
+    @PutMapping(path = "/api/auth/me/certificate", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('syllabus:sign')")
+    public FirmaService.CertificadoResponse guardarCertificado(@AuthenticationPrincipal UsuarioAutenticado actor,
+                                                               @RequestParam MultipartFile certificate,
+                                                               @RequestParam String password) {
+        return service.guardarCertificado(actor.id(), certificate, password);
+    }
+
+    @DeleteMapping("/api/auth/me/certificate")
+    @PreAuthorize("hasAuthority('syllabus:sign')")
+    public Map<String, String> eliminarCertificado(@AuthenticationPrincipal UsuarioAutenticado actor) {
+        service.eliminarCertificado(actor.id());
+        return Map.of("message", "Certificado eliminado");
+    }
+}

@@ -30,7 +30,15 @@ public class Programa extends BaseEntity {
     @JoinColumn(name = "department_id")
     private Departamento departamento;
 
-    /** Correo de la coordinación; si es nulo el programa no tiene coordinación (ver V6__correo_coordinacion.sql). */
+    /** Solo en posgrado: el pregrado llega a su facultad por el departamento. */
+    @ManyToOne
+    @JoinColumn(name = "faculty_id")
+    private Facultad facultad;
+
+    /**
+     * Solo en posgrado: correo de la coordinación del programa. Si es nulo, el syllabus muestra el
+     * docente asignado. En pregrado el contacto es la coordinación del departamento.
+     */
     @Column(name = "coordination_email")
     private String coordinationEmail;
 
@@ -67,6 +75,15 @@ public class Programa extends BaseEntity {
 
     public void setDepartamento(Departamento departamento) {
         this.departamento = departamento;
+    }
+
+    /** Facultad del programa: la propia (posgrado) o la de su departamento (pregrado). */
+    public Facultad getFacultad() {
+        return departamento != null ? departamento.getFacultad() : facultad;
+    }
+
+    public void setFacultad(Facultad facultad) {
+        this.facultad = facultad;
     }
 
     public String getCoordinationEmail() {

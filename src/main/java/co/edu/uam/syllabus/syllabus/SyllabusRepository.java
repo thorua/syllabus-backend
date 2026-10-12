@@ -17,17 +17,20 @@ import org.springframework.data.jpa.repository.Query;
 public interface SyllabusRepository extends JpaRepository<Syllabus, UUID>, JpaSpecificationExecutor<Syllabus> {
 
     @Override
-    @EntityGraph(attributePaths = {"asignatura", "asignatura.programa", "asignatura.programa.departamento",
-        "asignatura.departamento", "asignatura.profesor", "createdBy"})
+    @EntityGraph(attributePaths = {"asignatura", "asignatura.programa", "asignatura.programa.facultad",
+        "asignatura.programa.departamento", "asignatura.programa.departamento.facultad",
+        "asignatura.departamento", "asignatura.departamento.facultad", "asignatura.profesor", "createdBy"})
     Page<Syllabus> findAll(Specification<Syllabus> spec, Pageable pageable);
 
     @Override
-    @EntityGraph(attributePaths = {"asignatura", "asignatura.programa", "asignatura.programa.departamento",
-        "asignatura.departamento", "asignatura.profesor", "createdBy"})
+    @EntityGraph(attributePaths = {"asignatura", "asignatura.programa", "asignatura.programa.facultad",
+        "asignatura.programa.departamento", "asignatura.programa.departamento.facultad",
+        "asignatura.departamento", "asignatura.departamento.facultad", "asignatura.profesor", "createdBy"})
     List<Syllabus> findAll(Specification<Syllabus> spec, Sort sort);
 
-    @EntityGraph(attributePaths = {"asignatura", "asignatura.programa", "asignatura.programa.departamento",
-        "asignatura.departamento", "asignatura.profesor", "createdBy", "secciones"})
+    @EntityGraph(attributePaths = {"asignatura", "asignatura.programa", "asignatura.programa.facultad",
+        "asignatura.programa.departamento", "asignatura.programa.departamento.facultad",
+        "asignatura.departamento", "asignatura.departamento.facultad", "asignatura.profesor", "createdBy", "secciones"})
     Optional<Syllabus> findDetalleById(UUID id);
 
     /** Bloquea la fila para que dos ediciones simultáneas no generen el mismo número de versión. */

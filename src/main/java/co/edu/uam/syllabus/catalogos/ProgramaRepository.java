@@ -17,4 +17,11 @@ public interface ProgramaRepository extends JpaRepository<Programa, UUID> {
     @Query("select p.departamento.id, count(p) from Programa p where p.active and p.departamento is not null"
             + " group by p.departamento.id")
     List<Object[]> contarPorDepartamento();
+
+    boolean existsByFacultadIdAndActiveTrue(UUID facultadId);
+
+    /** Filas [faculty_id, total] con los programas activos por facultad (la propia o la de su departamento). */
+    @Query("select coalesce(d.facultad.id, p.facultad.id), count(p) from Programa p left join p.departamento d"
+            + " where p.active group by coalesce(d.facultad.id, p.facultad.id)")
+    List<Object[]> contarPorFacultad();
 }

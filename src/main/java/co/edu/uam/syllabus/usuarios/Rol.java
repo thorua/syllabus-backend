@@ -13,17 +13,18 @@ import java.util.Set;
  */
 public enum Rol {
     ESTUDIANTE(10, null,
-            "syllabus:read", "subject:read", "program:read", "department:read"),
+            "syllabus:read", "subject:read", "program:read", "department:read", "faculty:read"),
     PROFESOR(20, ESTUDIANTE,
             "syllabus:create", "syllabus:update", "syllabus:export"),
     COORDINADOR_PROGRAMA(30, PROFESOR,
-            "syllabus:delete", "syllabus:versions", "subject:assign"),
+            "syllabus:delete", "syllabus:versions", "subject:assign", "syllabus:sign"),
     COORDINADOR_DEPARTAMENTO(40, COORDINADOR_PROGRAMA,
             "subject:create", "subject:update", "subject:delete", "export:batch"),
     ADMINISTRADOR(50, COORDINADOR_DEPARTAMENTO,
             "user:read", "user:create", "user:update", "user:delete", "user:permissions", "user:affiliations",
+            "faculty:create", "faculty:update", "faculty:delete",
             "department:create", "department:update", "department:delete",
-            "program:create", "program:update", "program:delete",
+            "program:create", "program:update", "program:delete", "plan:manage",
             "config:update", "audit:read", "syllabus:header"),
     ADM_REGISTRO(45, ADMINISTRADOR);
 

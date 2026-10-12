@@ -4,6 +4,7 @@ import co.edu.uam.syllabus.auditoria.AuditEvent;
 import co.edu.uam.syllabus.common.security.UsuarioAutenticado;
 import co.edu.uam.syllabus.syllabus.SyllabusResponse;
 import co.edu.uam.syllabus.syllabus.SyllabusService;
+import co.edu.uam.syllabus.syllabus.firma.FirmaService;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -20,7 +21,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
-/** UC15 exportar un syllabus en PDF y UC16 exportar por lote (ZIP de PDF), con el formato Almera (UC17). */
+/**
+ * UC15 exportar un syllabus en PDF y UC16 exportar por lote (ZIP de PDF), con el formato Almera (UC17).
+ * Un syllabus verificado se exporta con el PDF que firmaron la coordinación y Registro Académico.
+ */
 @Service
 public class ExportacionService {
 
@@ -33,11 +37,14 @@ public class ExportacionService {
     public record LoteRequest(List<UUID> syllabusIds, UUID departmentId, UUID programId, String academicPeriod) {}
 
     private final SyllabusService syllabus;
+    private final FirmaService firmas;
     private final AlmeraPdf pdf;
     private final ApplicationEventPublisher eventos;
 
-    public ExportacionService(SyllabusService syllabus, AlmeraPdf pdf, ApplicationEventPublisher eventos) {
+    public ExportacionService(SyllabusService syllabus, FirmaService firmas, AlmeraPdf pdf,
+                              ApplicationEventPublisher eventos) {
         this.syllabus = syllabus;
+        this.firmas = firmas;
         this.pdf = pdf;
         this.eventos = eventos;
     }
@@ -46,7 +53,7 @@ public class ExportacionService {
         SyllabusResponse s = syllabus.obtener(actor, id);
         eventos.publishEvent(AuditEvent.de(actor.id(), "EXPORT", ENTIDAD, id)
                 .con(Map.of("title", s.title(), "format", "PDF")));
-        return new Archivo(nombre(s) + ".pdf", pdf.syllabus(s));
+        return new Archivo(nombre(s) + ".pdf", documento(s));
     }
 
     /** UC16: syllabus vigentes elegidos o filtrados por departamento, programa o período. */
@@ -71,7 +78,7 @@ public class ExportacionService {
                     archivo = base + "-" + n + ".pdf";
                 }
                 zip.putNextEntry(new ZipEntry(archivo));
-                zip.write(pdf.syllabus(s));
+                zip.write(documento(s));
                 zip.closeEntry();
             }
             zip.finish();
@@ -83,6 +90,10 @@ public class ExportacionService {
         } catch (IOException e) {
             throw new UncheckedIOException("No se pudo generar el archivo ZIP.", e);
         }
+    }
+
+    private byte[] documento(SyllabusResponse s) {
+        return firmas.documentoVerificado(s.id()).orElseGet(() -> pdf.syllabus(s));
     }
 
     public Archivo plantilla() {

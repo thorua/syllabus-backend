@@ -24,11 +24,13 @@ class PermisosYAlcanceTest extends PruebaIntegracion {
 
     @Test
     void elEstudianteSoloVeSyllabusVigentesDeSuPrograma() throws Exception {
+        // Ve los de la malla de Ing. de Sistemas, también los que ofrece Matemáticas; no los de posgrado.
         mvc.perform(como("estudiante", get("/api/syllabus?limit=100")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data", not(empty())))
                 .andExpect(jsonPath("$.data[*].status", everyItem(is("ACTIVO"))))
-                .andExpect(jsonPath("$.data[*].subject.program.id", everyItem(is(PROGRAMA_SISTEMAS.toString()))));
+                .andExpect(jsonPath("$.data[*].subject.code", hasItem("MAT100")))
+                .andExpect(jsonPath("$.data[*].subject.code", not(hasItem("MIA501"))));
 
         // Un borrador de su programa no existe para él (UC10: solo la versión vigente).
         mvc.perform(como("estudiante", get("/api/syllabus/" + ALGORITMOS_BORRADOR)))
@@ -39,11 +41,18 @@ class PermisosYAlcanceTest extends PruebaIntegracion {
 
     @Test
     void elCoordinadorDeProgramaSoloGestionaSusProgramas() throws Exception {
-        // coordinador.programa coordina Ing. de Software y posgrados, no Ing. de Sistemas.
-        mvc.perform(como("coordinador.programa", get("/api/syllabus/" + ING_SOFTWARE + "/versions")))
+        // coordinador.programa coordina Ing. Electrónica y posgrados, no Ing. de Sistemas.
+        mvc.perform(como("coordinador.programa", get("/api/syllabus/" + APRENDIZAJE_AUTOMATICO + "/versions")))
                 .andExpect(status().isOk());
         mvc.perform(como("coordinador.programa", get("/api/syllabus/" + BASE_DE_DATOS + "/versions")))
                 .andExpect(status().isForbidden());
+        // Matemáticas I está en la malla de Electrónica, pero la gestiona el Departamento de Matemáticas.
+        mvc.perform(como("coordinador.programa", get("/api/syllabus/" + MATEMATICAS_I)))
+                .andExpect(status().isOk());
+        mvc.perform(como("coordinador.programa", get("/api/syllabus/" + MATEMATICAS_I + "/versions")))
+                .andExpect(status().isForbidden());
+        mvc.perform(como("coordinador.matematicas", get("/api/syllabus/" + MATEMATICAS_I + "/versions")))
+                .andExpect(status().isOk());
         mvc.perform(como("coordinador.programa", post("/api/syllabus").content("""
                         {"subjectId": "%s", "academicPeriod": "2027-01", "title": "Fuera de alcance",
                          "sections": [{"sectionType": "justification", "title": "Justificación", "content": "x"}]}
@@ -54,7 +63,7 @@ class PermisosYAlcanceTest extends PruebaIntegracion {
     @Test
     void lasAsignaturasDePosgradoSoloLasGestionaAlcanceTotal() throws Exception {
         String asignatura = """
-                {"name": "Asignatura de prueba", "code": "PRB%s", "credits": 3, "semester": 1, "programId": "%s"}
+                {"name": "Asignatura de prueba", "code": "PRB%s", "credits": 3, "programId": "%s"}
                 """;
         mvc.perform(como("coordinador", post("/api/subjects")
                         .content(asignatura.formatted("901", PROGRAMA_MAESTRIA_IA))))
@@ -62,7 +71,8 @@ class PermisosYAlcanceTest extends PruebaIntegracion {
         mvc.perform(como("admin", post("/api/subjects")
                         .content(asignatura.formatted("902", PROGRAMA_MAESTRIA_IA))))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.department").doesNotExist());
+                .andExpect(jsonPath("$.department").doesNotExist())
+                .andExpect(jsonPath("$.program.id").value(PROGRAMA_MAESTRIA_IA.toString()));
     }
 
     @Test

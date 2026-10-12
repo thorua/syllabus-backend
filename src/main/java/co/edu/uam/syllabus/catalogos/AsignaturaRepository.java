@@ -13,10 +13,12 @@ import org.springframework.data.jpa.repository.Query;
 public interface AsignaturaRepository extends JpaRepository<Asignatura, UUID>, JpaSpecificationExecutor<Asignatura> {
 
     @Override
-    @EntityGraph(attributePaths = {"programa", "programa.departamento", "departamento", "profesor"})
+    @EntityGraph(attributePaths = {"programa", "programa.facultad", "programa.departamento", "programa.departamento.facultad",
+        "departamento", "departamento.facultad", "profesor"})
     List<Asignatura> findAll(Specification<Asignatura> spec, Sort sort);
 
-    @EntityGraph(attributePaths = {"programa", "programa.departamento", "departamento", "profesor"})
+    @EntityGraph(attributePaths = {"programa", "programa.facultad", "programa.departamento", "programa.departamento.facultad",
+        "departamento", "departamento.facultad", "profesor"})
     Optional<Asignatura> findDetalleById(UUID id);
 
     boolean existsByCodeIgnoreCase(String code);
@@ -25,7 +27,12 @@ public interface AsignaturaRepository extends JpaRepository<Asignatura, UUID>, J
 
     boolean existsByProgramaId(UUID programaId);
 
-    boolean existsByProgramaIdAndActiveTrue(UUID programaId);
+    /** Si el programa tiene asignaturas activas, propias (posgrado) o en sus planes de estudio. */
+    @Query(value = """
+            SELECT EXISTS (SELECT 1 FROM subjects s WHERE s.is_active AND (s.program_id = :programaId OR s.id IN (
+                SELECT ps.subject_id FROM study_plan_subjects ps JOIN study_plans sp ON sp.id = ps.plan_id
+                WHERE sp.program_id = :programaId)))""", nativeQuery = true)
+    boolean programaTieneAsignaturasActivas(UUID programaId);
 
     boolean existsByDepartamentoIdAndActiveTrue(UUID departamentoId);
 
@@ -44,7 +51,12 @@ public interface AsignaturaRepository extends JpaRepository<Asignatura, UUID>, J
             + " group by a.departamento.id")
     List<Object[]> contarPorDepartamento();
 
-    /** Filas [program_id, total] con las asignaturas activas por programa. */
-    @Query("select a.programa.id, count(a) from Asignatura a where a.active group by a.programa.id")
+    /** Filas [program_id, total] con las asignaturas activas por programa (propias o en sus planes). */
+    @Query(value = """
+            SELECT x.program_id, count(DISTINCT x.subject_id) FROM (
+                SELECT sp.program_id, ps.subject_id FROM study_plan_subjects ps JOIN study_plans sp ON sp.id = ps.plan_id
+                UNION SELECT program_id, id FROM subjects WHERE program_id IS NOT NULL) x
+            JOIN subjects s ON s.id = x.subject_id AND s.is_active
+            GROUP BY x.program_id""", nativeQuery = true)
     List<Object[]> contarPorPrograma();
 }

@@ -31,6 +31,7 @@ public class ConfiguracionService {
 
     public static final String PLANTILLA_EVALUACION = "evaluationTemplate";
 
+    private static final String MAXIMO_CARACTERES = "maxSectionLength";
     private static final String LOGO_URL = "universityLogoUrl";
     private static final String LOGO_POR_DEFECTO = "images/uam_header_logo.png";
     private static final TypeReference<List<Evaluacion.Corte>> CORTES = new TypeReference<>() {};
@@ -81,6 +82,13 @@ public class ConfiguracionService {
         }
     }
 
+    /** Máximo de caracteres por sección del syllabus (2000 si no está configurado). */
+    @Transactional(readOnly = true)
+    public int maximoCaracteresPorSeccion() {
+        String valor = valor(MAXIMO_CARACTERES);
+        return valor.isBlank() ? 2000 : Integer.parseInt(valor);
+    }
+
     /**
      * UC18–UC20: guarda la configuración. El logo no se cambia aquí sino con {@link #guardarLogo}.
      * Los syllabus existentes adoptan la nueva plantilla de evaluación la próxima vez que se editan.
@@ -105,6 +113,7 @@ public class ConfiguracionService {
         nuevos.put("documentDate", c.documentDate());
         nuevos.put("syllabusSubtitle", c.syllabusSubtitle());
         nuevos.put("footerText", c.footerText());
+        nuevos.put(MAXIMO_CARACTERES, String.valueOf(c.maxSectionLength()));
         nuevos.put(PLANTILLA_EVALUACION, aJson(plantilla));
 
         Map<String, String> actuales = valores();

@@ -33,7 +33,7 @@ class ContactoDelSyllabusTest extends PruebaIntegracion {
     @Test
     void enUnPosgradoSinCoordinacionHayQueAsignarDocenteAntesDeActivar() throws Exception {
         String asignatura = mvc.perform(como("admin", post("/api/subjects").content("""
-                        {"name": "Seminario de Investigación", "code": "MIA901", "credits": 2, "semester": 2,
+                        {"name": "Seminario de Investigación", "code": "MIA901", "credits": 2,
                          "programId": "%s"}""".formatted(PROGRAMA_MAESTRIA_IA))))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
@@ -41,7 +41,7 @@ class ContactoDelSyllabusTest extends PruebaIntegracion {
 
         mvc.perform(como("admin", post("/api/syllabus").content(SYLLABUS.formatted(id, "ACTIVO"))))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("El programa Maestría en Inteligencia Artificial no tiene correo "
+                .andExpect(jsonPath("$.error").value("Maestría en Inteligencia Artificial no tiene correo "
                         + "de coordinación: asigne un docente a la asignatura antes de activar el syllabus."));
 
         mvc.perform(como("admin", put("/api/subjects/" + id + "/assign-professor")

@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Departamentos (UC5) y programas de pregrado y posgrado (UC6). */
+/** Facultades, departamentos (UC5) y programas de pregrado y posgrado (UC6). */
 @RestController
 @RequestMapping("/api")
 public class CatalogoController {
@@ -30,10 +30,40 @@ public class CatalogoController {
         this.service = service;
     }
 
+    @GetMapping("/faculties")
+    @PreAuthorize("hasAuthority('faculty:read')")
+    public List<FacultadResponse> facultades(@RequestParam(defaultValue = "false") boolean includeInactive) {
+        return service.facultades(includeInactive);
+    }
+
+    @PostMapping("/faculties")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAuthority('faculty:create')")
+    public FacultadResponse crearFacultad(@AuthenticationPrincipal UsuarioAutenticado actor,
+                                          @Valid @RequestBody CatalogoService.FacultadRequest request) {
+        return service.crearFacultad(actor.id(), request);
+    }
+
+    @PutMapping("/faculties/{id}")
+    @PreAuthorize("hasAuthority('faculty:update')")
+    public FacultadResponse actualizarFacultad(@AuthenticationPrincipal UsuarioAutenticado actor, @PathVariable UUID id,
+                                               @Valid @RequestBody CatalogoService.FacultadRequest request) {
+        return service.actualizarFacultad(actor.id(), id, request);
+    }
+
+    @DeleteMapping("/faculties/{id}")
+    @PreAuthorize("hasAuthority('faculty:delete')")
+    public Map<String, String> desactivarFacultad(@AuthenticationPrincipal UsuarioAutenticado actor,
+                                                  @PathVariable UUID id) {
+        service.desactivarFacultad(actor.id(), id);
+        return Map.of("message", "Facultad desactivada correctamente");
+    }
+
     @GetMapping("/departments")
     @PreAuthorize("hasAuthority('department:read')")
-    public List<DepartamentoResponse> departamentos(@RequestParam(defaultValue = "false") boolean includeInactive) {
-        return service.departamentos(includeInactive);
+    public List<DepartamentoResponse> departamentos(@RequestParam(required = false) UUID facultyId,
+                                                    @RequestParam(defaultValue = "false") boolean includeInactive) {
+        return service.departamentos(facultyId, includeInactive);
     }
 
     @GetMapping("/departments/{id}")
@@ -69,8 +99,9 @@ public class CatalogoController {
     @GetMapping("/programs")
     @PreAuthorize("hasAuthority('program:read')")
     public List<ProgramaResponse> programas(@RequestParam(required = false) UUID departmentId,
+                                            @RequestParam(required = false) UUID facultyId,
                                             @RequestParam(defaultValue = "false") boolean includeInactive) {
-        return service.programas(departmentId, includeInactive);
+        return service.programas(departmentId, facultyId, includeInactive);
     }
 
     @GetMapping("/programs/{id}")

@@ -36,11 +36,8 @@ public class PermisoEvaluator {
         String recurso = permiso.substring(0, permiso.indexOf(':'));
         // Si el registro no existe se permite el paso para que el servicio responda 404.
         return switch (recurso) {
-            case "syllabus" -> asignatura("""
-                    SELECT s.id, s.program_id, s.department_id
-                    FROM syllabus y JOIN subjects s ON s.id = y.subject_id WHERE y.id = ?""", id, alcance);
-            case "subject" -> asignatura(
-                    "SELECT id, program_id, department_id FROM subjects WHERE id = ?", id, alcance);
+            case "syllabus" -> asignatura("SELECT subject_id FROM syllabus WHERE id = ?", id, alcance);
+            case "subject" -> asignatura("SELECT id FROM subjects WHERE id = ?", id, alcance);
             case "program" -> jdbc.sql("SELECT department_id FROM programs WHERE id = ?").param(id)
                     .query((rs, i) -> Optional.ofNullable(rs.getObject("department_id", UUID.class)))
                     .optional()
@@ -52,12 +49,6 @@ public class PermisoEvaluator {
     }
 
     private boolean asignatura(String sql, UUID id, Alcance alcance) {
-        return jdbc.sql(sql).param(id)
-                .query((rs, i) -> alcance.incluyeAsignatura(
-                        rs.getObject("id", UUID.class),
-                        rs.getObject("program_id", UUID.class),
-                        rs.getObject("department_id", UUID.class)))
-                .optional()
-                .orElse(true);
+        return jdbc.sql(sql).param(id).query(UUID.class).optional().map(alcance::incluyeAsignatura).orElse(true);
     }
 }
