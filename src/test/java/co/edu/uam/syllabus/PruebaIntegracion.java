@@ -40,20 +40,25 @@ public abstract class PruebaIntegracion {
         POSTGRES.start();
     }
 
-    // Datos demo (db/demo/V3__datos_demo.sql y V11__demo_estructura_academica.sql)
-    protected static final UUID BASE_DE_DATOS = UUID.fromString("50000000-0000-0000-0000-000000000001");
-    protected static final UUID ING_SOFTWARE = UUID.fromString("50000000-0000-0000-0000-000000000002");
-    protected static final UUID ALGORITMOS_BORRADOR = UUID.fromString("50000000-0000-0000-0000-000000000004");
-    protected static final UUID APRENDIZAJE_AUTOMATICO = UUID.fromString("50000000-0000-0000-0000-000000000005");
-    protected static final UUID MATEMATICAS_I = UUID.fromString("50000000-0000-0000-0000-000000000006");
-    protected static final UUID ASIG_BASE_DE_DATOS = UUID.fromString("30000000-0000-0000-0000-000000000001");
-    protected static final UUID ASIG_MATEMATICAS_I = UUID.fromString("30000000-0000-0000-0000-000000000009");
+    // Datos demo con la estructura real (db/demo/V15__demo_estructura_real.sql)
+    protected static final UUID ING_SOFTWARE_II = UUID.fromString("50000000-0000-0000-0000-000000000001");
+    protected static final UUID BASES_DE_DATOS_BORRADOR = UUID.fromString("50000000-0000-0000-0000-000000000002");
+    protected static final UUID GESTION_PROYECTOS_MGDS = UUID.fromString("50000000-0000-0000-0000-000000000004");
+    protected static final UUID MATEMATICAS_BASICAS = UUID.fromString("50000000-0000-0000-0000-000000000005");
+    protected static final UUID ASIG_ING_SOFTWARE_II = UUID.fromString("30000000-0000-0000-0000-000000000031");
+    protected static final UUID ASIG_MATEMATICAS_BASICAS = UUID.fromString("30000000-0000-0000-0000-000000000001");
+    protected static final UUID ASIG_REDES_LAN = UUID.fromString("30000000-0000-0000-0000-000000000030");
+    protected static final UUID ASIG_CURSO_LIBRE_I = UUID.fromString("30000000-0000-0000-0000-000000000044");
+    protected static final UUID ASIG_IA_MGDS = UUID.fromString("30000000-0000-0000-0000-000000000179");
     protected static final UUID DEPTO_COMPUTACIONALES = UUID.fromString("10000000-0000-0000-0000-000000000001");
-    protected static final UUID DEPTO_MATEMATICAS = UUID.fromString("10000000-0000-0000-0000-000000000002");
+    protected static final UUID DEPTO_FISICA_MATEMATICAS = UUID.fromString("10000000-0000-0000-0000-000000000002");
     protected static final UUID PROGRAMA_SISTEMAS = UUID.fromString("20000000-0000-0000-0000-000000000001");
     protected static final UUID PROGRAMA_ELECTRONICA = UUID.fromString("20000000-0000-0000-0000-000000000002");
-    protected static final UUID PROGRAMA_MAESTRIA_IA = UUID.fromString("20000000-0000-0000-0000-000000000004");
-    protected static final UUID PLAN_SISTEMAS_2026 = UUID.fromString("60000000-0000-0000-0000-000000000003");
+    protected static final UUID PROGRAMA_MAESTRIA_SOFTWARE = UUID.fromString("20000000-0000-0000-0000-000000000004");
+    protected static final UUID PROGRAMA_MAESTRIA_INGENIERIA = UUID.fromString("20000000-0000-0000-0000-000000000005");
+    protected static final UUID PLAN_SISTEMAS = UUID.fromString("60000000-0000-0000-0000-000000000001");
+    protected static final String PROFESOR = "40000000-0000-0000-0000-000000000001";
+    protected static final String ESTUDIANTE = "40000000-0000-0000-0000-000000000005";
 
     @Autowired
     protected MockMvc mvc;

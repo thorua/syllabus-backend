@@ -52,6 +52,10 @@ public class Asignatura extends BaseEntity {
 
     private String prerequisites;
 
+    /** Falso en los espacios del plan sin syllabus propio: cursos libres, electivas, énfasis, prácticas. */
+    @Column(name = "requires_syllabus", nullable = false)
+    private boolean requiresSyllabus = true;
+
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 
@@ -152,6 +156,14 @@ public class Asignatura extends BaseEntity {
     /** Nombre del responsable de la asignatura, para los mensajes. */
     public String responsable() {
         return departamento != null ? departamento.getName() : programa.getName();
+    }
+
+    public boolean isRequiresSyllabus() {
+        return requiresSyllabus;
+    }
+
+    public void setRequiresSyllabus(boolean requiresSyllabus) {
+        this.requiresSyllabus = requiresSyllabus;
     }
 
     public boolean isActive() {

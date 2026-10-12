@@ -17,12 +17,16 @@ import java.io.UncheckedIOException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -40,6 +44,23 @@ public class FirmaService {
     private static final String ROTULO_REGISTRO = "Firma digital de Registro Académico";
     private static final String CARGO_REGISTRO = "Coordinación de Registro Académico";
 
+    /** Syllabus activos con la versión vigente y los pasos ya firmados en ella. */
+    private static final String PENDIENTES = """
+            SELECT y.id, y.title, y.academic_period, y.updated_at, s.code, s.name, s.department_id, s.program_id,
+                   coalesce(d.name, p.name) AS responsable, v.version,
+                   coalesce(bool_or(f.step = 'DEPARTAMENTO'), FALSE) AS departamento,
+                   coalesce(bool_or(f.step = 'REGISTRO'), FALSE) AS registro
+            FROM syllabus y
+            JOIN subjects s ON s.id = y.subject_id
+            LEFT JOIN departments d ON d.id = s.department_id
+            LEFT JOIN programs p ON p.id = s.program_id
+            JOIN LATERAL (SELECT max(version_number) AS version FROM syllabus_versions
+                          WHERE syllabus_id = y.id) v ON TRUE
+            LEFT JOIN syllabus_signatures f ON f.syllabus_id = y.id AND f.version_number = v.version
+            WHERE y.status = 'ACTIVO'
+            GROUP BY y.id, s.id, d.name, p.name, v.version
+            ORDER BY y.updated_at""";
+
     public record FirmaResponse(Verificacion.Paso step, String signerName, String certificateSubject,
                                 String certificateIssuer, Instant signedAt) {}
 
@@ -54,6 +75,16 @@ public class FirmaService {
                                  List<FirmaResponse> signatures, Verificacion.Paso nextStep, String nextSigner,
                                  boolean canSign, CertificadoResponse storedCertificate) {}
 
+    /** Syllabus vigente que espera la firma del usuario en la versión indicada. */
+    public record PendienteResponse(UUID id, String title, String academicPeriod, String subjectCode,
+                                    String subjectName, String offeredBy, int version, Verificacion.Paso step,
+                                    Instant updatedAt) {}
+
+    public record ItemLote(UUID id, int version) {}
+
+    /** Resultado de cada syllabus de una firma por lote. */
+    public record ResultadoLote(UUID id, boolean signed, String message, Verificacion.Estado state) {}
+
     private final SyllabusService syllabusService;
     private final SyllabusRepository syllabus;
     private final VersionadoService versionado;
@@ -62,12 +93,14 @@ public class FirmaService {
     private final UsuarioRepository usuarios;
     private final AlmeraPdf almera;
     private final FirmaPdf firmaPdf;
+    private final JdbcClient jdbc;
+    private final TransactionTemplate transaccion;
     private final ApplicationEventPublisher eventos;
 
     public FirmaService(SyllabusService syllabusService, SyllabusRepository syllabus, VersionadoService versionado,
                         FirmaSyllabusRepository firmas, CertificadoFirmaRepository certificados,
-                        UsuarioRepository usuarios, AlmeraPdf almera, FirmaPdf firmaPdf,
-                        ApplicationEventPublisher eventos) {
+                        UsuarioRepository usuarios, AlmeraPdf almera, FirmaPdf firmaPdf, JdbcClient jdbc,
+                        PlatformTransactionManager transacciones, ApplicationEventPublisher eventos) {
         this.syllabusService = syllabusService;
         this.syllabus = syllabus;
         this.versionado = versionado;
@@ -76,6 +109,8 @@ public class FirmaService {
         this.usuarios = usuarios;
         this.almera = almera;
         this.firmaPdf = firmaPdf;
+        this.jdbc = jdbc;
+        this.transaccion = new TransactionTemplate(transacciones);
         this.eventos = eventos;
     }
 
@@ -112,6 +147,65 @@ public class FirmaService {
     @Transactional
     public FirmasResponse firmar(UsuarioAutenticado actor, UUID id, int version, String contrasena,
                                  MultipartFile archivo, boolean recordar) {
+        // Primero a quién le corresponde la firma; después, el certificado.
+        Syllabus s = syllabus.findDetalleById(id).orElseThrow(FirmaService::noEncontrado);
+        exigirTurno(actor, s, siguiente(firmas.findBySyllabusIdAndVersionNumberOrderBySignedAt(id,
+                versionado.actual(id))));
+        byte[] p12 = archivo == null || archivo.isEmpty() ? certificadoRegistrado(actor.id()) : bytes(archivo);
+        FirmaPdf.Certificado certificado = firmaPdf.abrir(p12, contrasena.toCharArray());
+        if (recordar && archivo != null && !archivo.isEmpty()) {
+            registrar(actor.id(), p12, certificado);
+        }
+        firmarCon(actor, id, version, certificado);
+        return estado(actor, id);
+    }
+
+    /**
+     * Firma varios syllabus con el mismo certificado; cada uno en su propia transacción, de modo que
+     * si uno falla (p. ej. cambió mientras se revisaba) los demás quedan firmados.
+     */
+    public List<ResultadoLote> firmarLote(UsuarioAutenticado actor, List<ItemLote> items, String contrasena,
+                                         MultipartFile archivo) {
+        byte[] p12 = archivo == null || archivo.isEmpty() ? certificadoRegistrado(actor.id()) : bytes(archivo);
+        FirmaPdf.Certificado certificado = firmaPdf.abrir(p12, contrasena.toCharArray());
+        return items.stream().map(item -> {
+            try {
+                Verificacion.Estado estado = transaccion.execute(tx -> {
+                    firmarCon(actor, item.id(), item.version(), certificado);
+                    return Verificacion.estado(firmas.pasosFirmados(item.id(), item.version()));
+                });
+                return new ResultadoLote(item.id(), true, "Firmado", estado);
+            } catch (ResponseStatusException e) {
+                return new ResultadoLote(item.id(), false, e.getReason(), null);
+            }
+        }).toList();
+    }
+
+    /** Syllabus vigentes cuya firma pendiente le corresponde al usuario, los más antiguos primero. */
+    @Transactional(readOnly = true)
+    public List<PendienteResponse> pendientes(UsuarioAutenticado actor) {
+        if (!actor.permisos().contains("syllabus:sign")) {
+            return List.of();
+        }
+        Usuario u = usuarios.findDetalleById(actor.id()).orElseThrow();
+        return jdbc.sql(PENDIENTES).query((rs, i) -> {
+            if (rs.getBoolean("registro")) {
+                return null;
+            }
+            Verificacion.Paso paso = rs.getBoolean("departamento")
+                    ? Verificacion.Paso.REGISTRO : Verificacion.Paso.DEPARTAMENTO;
+            if (!leCorresponde(u, paso, rs.getObject("department_id", UUID.class),
+                    rs.getObject("program_id", UUID.class))) {
+                return null;
+            }
+            return new PendienteResponse(rs.getObject("id", UUID.class), rs.getString("title"),
+                    rs.getString("academic_period"), rs.getString("code"), rs.getString("name"),
+                    rs.getString("responsable"), rs.getInt("version"), paso,
+                    rs.getTimestamp("updated_at").toInstant());
+        }).list().stream().filter(Objects::nonNull).toList();
+    }
+
+    private void firmarCon(UsuarioAutenticado actor, UUID id, int version, FirmaPdf.Certificado certificado) {
         Syllabus s = syllabus.findParaEditarById(id).orElseThrow(FirmaService::noEncontrado);
         int actual = versionado.actual(id);
         if (version != actual) {
@@ -122,11 +216,6 @@ public class FirmaService {
         Verificacion.Paso paso = siguiente(hechas);
         exigirTurno(actor, s, paso);
 
-        byte[] p12 = archivo == null || archivo.isEmpty() ? certificadoRegistrado(actor.id()) : bytes(archivo);
-        FirmaPdf.Certificado certificado = firmaPdf.abrir(p12, contrasena.toCharArray());
-        if (recordar && archivo != null && !archivo.isEmpty()) {
-            registrar(actor.id(), p12, certificado);
-        }
         String cargo = cargo(paso, s.getAsignatura());
         byte[] firmado = firmaPdf.firmar(documentoPorFirmar(actor, s, hechas), certificado,
                 paso == Verificacion.Paso.DEPARTAMENTO ? ROTULO_COORDINACION : ROTULO_REGISTRO, cargo,
@@ -138,7 +227,9 @@ public class FirmaService {
                 "title", s.getTitle(), "versionNumber", actual, "step", paso.name(),
                 "certificate", certificado.titular())));
         firmas.flush();
-        return estado(actor, id);
+        if (paso == Verificacion.Paso.DEPARTAMENTO) {
+            eventos.publishEvent(new SyllabusPorFirmar(id));
+        }
     }
 
     /** PDF firmado por coordinación y Registro de la versión vigente, si el syllabus está verificado. */
@@ -220,19 +311,22 @@ public class FirmaService {
      * si es de posgrado. Segundo paso: Registro Académico. El Administrador no firma.
      */
     private boolean puedeFirmar(UsuarioAutenticado actor, Verificacion.Paso paso, Asignatura a) {
-        if (!actor.permisos().contains("syllabus:sign")) {
-            return false;
-        }
-        Usuario u = usuarios.findDetalleById(actor.id()).orElseThrow();
+        return actor.permisos().contains("syllabus:sign") && leCorresponde(
+                usuarios.findDetalleById(actor.id()).orElseThrow(), paso,
+                a.getDepartamento() == null ? null : a.getDepartamento().getId(),
+                a.getPrograma() == null ? null : a.getPrograma().getId());
+    }
+
+    private static boolean leCorresponde(Usuario u, Verificacion.Paso paso, UUID departamento, UUID posgrado) {
         if (paso == Verificacion.Paso.REGISTRO) {
             return u.getRoles().contains(Rol.ADM_REGISTRO);
         }
-        if (a.getDepartamento() != null) {
+        if (departamento != null) {
             return u.getRoles().contains(Rol.COORDINADOR_DEPARTAMENTO)
-                    && u.getDepartamentos().stream().anyMatch(d -> d.getId().equals(a.getDepartamento().getId()));
+                    && u.getDepartamentos().stream().anyMatch(d -> d.getId().equals(departamento));
         }
         return u.getRoles().contains(Rol.COORDINADOR_PROGRAMA)
-                && u.getProgramas().stream().anyMatch(p -> p.getId().equals(a.getPrograma().getId()));
+                && u.getProgramas().stream().anyMatch(p -> p.getId().equals(posgrado));
     }
 
     private static Verificacion.Paso siguiente(List<FirmaSyllabus> hechas) {

@@ -74,6 +74,8 @@ public class AsignaturaService {
             @Min(0) @Max(40) Integer hoursDirigido,
             @Min(0) @Max(40) Integer hoursIndependiente,
             @Size(max = 300) String prerequisites,
+            /** Falso en espacios del plan sin syllabus propio (curso libre, electiva...); nulo = verdadero. */
+            Boolean requiresSyllabus,
             Boolean isActive) {}
 
     /**
@@ -134,6 +136,7 @@ public class AsignaturaService {
     @Transactional
     public void desactivar(UUID actor, UUID id) {
         Asignatura a = buscar(id);
+        validarAlcanceEscritura(actor, a.getDepartamento(), a.getPrograma());
         validarDesactivar(id);
         a.setActive(false);
         publicar(actor, "DELETE", a, Map.of());
@@ -154,7 +157,10 @@ public class AsignaturaService {
     private void aplicar(UUID actor, Asignatura a, AsignaturaRequest req, String codigo) {
         Programa posgrado = req.programId() == null ? null : posgradoActivo(req.programId());
         Departamento departamento = posgrado == null ? departamentoActivo(req.departmentId()) : null;
-        validarAlcanceEscritura(actor, departamento);
+        validarAlcanceEscritura(actor, departamento, posgrado);
+        if (a.getId() != null) {
+            validarAlcanceEscritura(actor, a.getDepartamento(), a.getPrograma());
+        }
 
         a.setName(req.name().trim());
         a.setCode(codigo);
@@ -166,21 +172,25 @@ public class AsignaturaService {
         a.setHoursDirigido(req.hoursDirigido());
         a.setHoursIndependiente(req.hoursIndependiente());
         a.setPrerequisites(StringUtils.hasText(req.prerequisites()) ? req.prerequisites().trim() : null);
+        a.setRequiresSyllabus(!Boolean.FALSE.equals(req.requiresSyllabus()));
         if (req.isActive() != null) {
             a.setActive(req.isActive());
         }
     }
 
-    /** Coord. de Departamento: solo sus departamentos. Posgrado (sin departamento): solo alcance total. */
-    private void validarAlcanceEscritura(UUID actor, Departamento departamento) {
+    /**
+     * Cada asignatura la gestiona quien la ofrece: el Coordinador de su departamento o, en posgrado
+     * (que no tiene departamento), el Coordinador del programa. Administración y Registro, todas.
+     */
+    private void validarAlcanceEscritura(UUID actor, Departamento departamento, Programa posgrado) {
         Alcance alcance = scopeService.de(actor, true);
-        if (departamento == null && !alcance.total()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Las asignaturas de posgrado solo las gestiona el Administrador o Registro Académico.");
-        }
         if (departamento != null && !alcance.incluyeDepartamento(departamento.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Solo puede gestionar asignaturas de sus departamentos.");
+        }
+        if (posgrado != null && !alcance.incluyePrograma(posgrado.getId(), null)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Las asignaturas de un posgrado las gestiona "
+                    + "la coordinación de ese programa, Administración o Registro Académico.");
         }
     }
 

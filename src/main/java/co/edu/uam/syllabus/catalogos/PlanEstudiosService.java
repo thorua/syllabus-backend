@@ -23,9 +23,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * Planes de estudio de cada programa y su malla curricular por semestre, con el estado del
- * syllabus de cada asignatura en un período: verificado (firmado por la coordinación y por
- * Registro), pendiente de firma, en borrador o sin syllabus.
+ * Planes de estudio de cada programa y su malla curricular por semestre, ordenada por área de
+ * formación como en los planes publicados, con el estado del syllabus de cada asignatura en un
+ * período: verificado (firmado por la coordinación y por Registro), pendiente de firma, en borrador
+ * o sin syllabus. Los espacios del plan (cursos libres, electivas) no tienen syllabus propio.
  */
 @Service
 public class PlanEstudiosService {
@@ -33,11 +34,11 @@ public class PlanEstudiosService {
     private static final String ENTIDAD = "study_plan";
 
     /** Estado del syllabus de una asignatura en la malla. */
-    public enum EstadoMalla { VERIFICADO, PENDIENTE_REGISTRO, PENDIENTE_FIRMA, BORRADOR, SIN_SYLLABUS }
+    public enum EstadoMalla { VERIFICADO, PENDIENTE_REGISTRO, PENDIENTE_FIRMA, BORRADOR, SIN_SYLLABUS, ESPACIO }
 
     public record PlanRequest(@NotNull UUID programId, @NotBlank @Size(max = 100) String name, Boolean isActive) {}
 
-    public record AsignaturaEnPlanRequest(@Min(1) @Max(12) int semester) {}
+    public record AsignaturaEnPlanRequest(@Min(1) @Max(12) int semester, @NotNull PlanAsignatura.Area area) {}
 
     public record PlanResponse(UUID id, UUID programId, String programName, String name, boolean isActive,
                                int subjectCount) {
@@ -47,8 +48,10 @@ public class PlanEstudiosService {
         }
     }
 
-    public record Celda(UUID subjectId, String code, String name, int credits, String offeredBy, boolean isActive,
-                        UUID syllabusId, EstadoMalla state) {}
+    /** offeredByCode es el código del departamento (o programa de posgrado) que ofrece la asignatura. */
+    public record Celda(UUID subjectId, String code, String name, int credits, PlanAsignatura.Area area,
+                        String offeredBy, String offeredByCode, boolean isActive, UUID syllabusId,
+                        EstadoMalla state) {}
 
     public record Semestre(int number, int credits, List<Celda> subjects) {}
 
@@ -99,13 +102,17 @@ public class PlanEstudiosService {
         }
         Map<Integer, List<Celda>> porSemestre = new TreeMap<>();
         plan.getAsignaturas().stream()
-                .sorted(Comparator.comparing((PlanAsignatura pa) -> pa.getAsignatura().getCode()))
+                .sorted(Comparator.comparing(PlanAsignatura::getArea).thenComparingInt(PlanAsignatura::getPosition)
+                        .thenComparing(pa -> pa.getAsignatura().getCode()))
                 .forEach(pa -> {
                     Asignatura a = pa.getAsignatura();
                     SyllabusEnMalla y = syllabus.get(a.getId());
+                    EstadoMalla estado = !a.isRequiresSyllabus() ? EstadoMalla.ESPACIO
+                            : y == null ? EstadoMalla.SIN_SYLLABUS : y.estado();
                     porSemestre.computeIfAbsent(pa.getSemester(), s -> new ArrayList<>()).add(new Celda(
-                            a.getId(), a.getCode(), a.getName(), a.getCredits(), a.responsable(), a.isActive(),
-                            y == null ? null : y.id(), y == null ? EstadoMalla.SIN_SYLLABUS : y.estado()));
+                            a.getId(), a.getCode(), a.getName(), a.getCredits(), pa.getArea(), a.responsable(),
+                            a.getDepartamento() != null ? a.getDepartamento().getCode() : a.getPrograma().getCode(),
+                            a.isActive(), y == null ? null : y.id(), estado));
                 });
         List<Semestre> semestres = porSemestre.entrySet().stream()
                 .map(e -> new Semestre(e.getKey(), e.getValue().stream().mapToInt(Celda::credits).sum(), e.getValue()))
@@ -142,9 +149,13 @@ public class PlanEstudiosService {
         return PlanResponse.de(plan);
     }
 
-    /** Agrega la asignatura al plan en el semestre indicado o la mueve de semestre. */
+    /**
+     * Agrega la asignatura al plan en el semestre y el área indicados, al final de su semestre; si ya
+     * estaba, la mueve y conserva su orden.
+     */
     @Transactional
-    public MallaResponse ubicarAsignatura(UUID actor, UUID id, UUID asignaturaId, int semestre, String periodo) {
+    public MallaResponse ubicarAsignatura(UUID actor, UUID id, UUID asignaturaId, int semestre,
+                                          PlanAsignatura.Area area, String periodo) {
         PlanEstudios plan = buscar(id);
         Asignatura a = asignaturas.findById(asignaturaId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Asignatura no encontrada."));
@@ -155,10 +166,16 @@ public class PlanEstudiosService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "La asignatura pertenece al programa " + a.getPrograma().getName() + " y solo va en sus planes.");
         }
+        int posicion = plan.getAsignaturas().stream()
+                .filter(pa -> pa.getAsignatura().getId().equals(asignaturaId))
+                .mapToInt(PlanAsignatura::getPosition)
+                .findFirst()
+                .orElseGet(() -> plan.getAsignaturas().stream()
+                        .mapToInt(PlanAsignatura::getPosition).max().orElse(0) + 1);
         plan.getAsignaturas().removeIf(pa -> pa.getAsignatura().getId().equals(asignaturaId));
         planes.flush();
-        plan.getAsignaturas().add(new PlanAsignatura(plan, a, semestre));
-        publicar(actor, "UPDATE", plan, Map.of("subject", a.getCode(), "semester", semestre));
+        plan.getAsignaturas().add(new PlanAsignatura(plan, a, semestre, area, posicion));
+        publicar(actor, "UPDATE", plan, Map.of("subject", a.getCode(), "semester", semestre, "area", area.name()));
         return malla(id, periodo);
     }
 

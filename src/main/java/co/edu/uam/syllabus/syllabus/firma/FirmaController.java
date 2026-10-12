@@ -1,6 +1,10 @@
 package co.edu.uam.syllabus.syllabus.firma;
 
 import co.edu.uam.syllabus.common.security.UsuarioAutenticado;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.HttpHeaders;
@@ -25,9 +29,11 @@ import org.springframework.web.multipart.MultipartFile;
 public class FirmaController {
 
     private final FirmaService service;
+    private final ObjectMapper json;
 
-    public FirmaController(FirmaService service) {
+    public FirmaController(FirmaService service, ObjectMapper json) {
         this.service = service;
+        this.json = json;
     }
 
     @GetMapping("/api/syllabus/{id}/signatures")
@@ -56,6 +62,25 @@ public class FirmaController {
                                               @RequestParam(required = false) MultipartFile certificate,
                                               @RequestParam(defaultValue = "false") boolean remember) {
         return service.firmar(actor, id, version, password, certificate, remember);
+    }
+
+    /** Bandeja de syllabus vigentes cuya firma pendiente le corresponde al usuario. */
+    @GetMapping("/api/signatures/pending")
+    @PreAuthorize("hasAuthority('syllabus:sign')")
+    public List<FirmaService.PendienteResponse> pendientes(@AuthenticationPrincipal UsuarioAutenticado actor) {
+        return service.pendientes(actor);
+    }
+
+    /** Firma por lote: items es la lista JSON [{"id", "version"}] de los syllabus revisados. */
+    @PostMapping(path = "/api/signatures/batch", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('syllabus:sign')")
+    public List<FirmaService.ResultadoLote> firmarLote(@AuthenticationPrincipal UsuarioAutenticado actor,
+                                                      @RequestParam String items,
+                                                      @RequestParam String password,
+                                                      @RequestParam(required = false) MultipartFile certificate)
+            throws JsonProcessingException {
+        List<FirmaService.ItemLote> lista = json.readValue(items, new TypeReference<>() {});
+        return service.firmarLote(actor, lista, password, certificate);
     }
 
     @GetMapping("/api/auth/me/certificate")

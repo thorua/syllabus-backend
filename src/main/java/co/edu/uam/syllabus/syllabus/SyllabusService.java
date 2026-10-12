@@ -13,6 +13,7 @@ import co.edu.uam.syllabus.configuracion.Evaluacion;
 import co.edu.uam.syllabus.syllabus.versionado.VersionResponse;
 import co.edu.uam.syllabus.syllabus.versionado.VersionSyllabus;
 import co.edu.uam.syllabus.syllabus.firma.FirmaSyllabusRepository;
+import co.edu.uam.syllabus.syllabus.firma.SyllabusPorFirmar;
 import co.edu.uam.syllabus.syllabus.firma.Verificacion;
 import co.edu.uam.syllabus.syllabus.versionado.VersionadoService;
 import co.edu.uam.syllabus.usuarios.Usuario;
@@ -182,6 +183,7 @@ public class SyllabusService {
         if (!a.isActive()) {
             throw invalido("La asignatura seleccionada está inactiva.");
         }
+        sinSyllabusPropio(a);
         if (!scopeService.de(actor.id(), true).incluyeAsignatura(a.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Solo puede crear syllabus de las asignaturas a su cargo.");
@@ -205,6 +207,7 @@ public class SyllabusService {
 
         int version = versionado.registrar(s, "Creación del syllabus", autor);
         publicar(actor, "CREATE", s, version);
+        avisarSiQuedaPorFirmar(s);
         return respuesta(s, version);
     }
 
@@ -221,6 +224,7 @@ public class SyllabusService {
         if (origen.getStatus() == Syllabus.Estado.INACTIVO) {
             throw invalido("No se puede renovar un syllabus inactivo.");
         }
+        sinSyllabusPropio(a);
         if (periodo.equals(origen.getAcademicPeriod())) {
             throw invalido("Elija un período distinto al del syllabus de origen.");
         }
@@ -246,6 +250,7 @@ public class SyllabusService {
         eventos.publishEvent(AuditEvent.de(actor.id(), "CREATE", ENTIDAD, s.getId()).con(Map.of(
                 "title", s.getTitle(), "academicPeriod", periodo, "status", s.getStatus().name(),
                 "versionNumber", version, "renewedFrom", origen.getAcademicPeriod())));
+        avisarSiQuedaPorFirmar(s);
         return respuesta(s, version);
     }
 
@@ -277,6 +282,7 @@ public class SyllabusService {
 
         int version = versionado.registrar(s, req.changeDescription().trim(), usuarios.getReferenceById(actor.id()));
         publicar(actor, "UPDATE", s, version);
+        avisarSiQuedaPorFirmar(s);
         return respuesta(s, version);
     }
 
@@ -343,6 +349,21 @@ public class SyllabusService {
         if (s.getStatus() == Syllabus.Estado.ACTIVO && a.coordinationEmail() == null && a.getProfesor() == null) {
             throw invalido(a.responsable() + " no tiene correo de coordinación: asigne un docente a la asignatura "
                     + "antes de activar el syllabus.");
+        }
+    }
+
+    /** Una versión vigente nueva no tiene firmas: se avisa a la coordinación que debe firmarla. */
+    private void avisarSiQuedaPorFirmar(Syllabus s) {
+        if (s.getStatus() == Syllabus.Estado.ACTIVO) {
+            eventos.publishEvent(new SyllabusPorFirmar(s.getId()));
+        }
+    }
+
+    /** Los espacios del plan (curso libre, electiva, énfasis, práctica) no tienen syllabus propio. */
+    private static void sinSyllabusPropio(Asignatura a) {
+        if (!a.isRequiresSyllabus()) {
+            throw invalido(a.getName() + " es un espacio del plan sin syllabus propio (curso libre, electiva, "
+                    + "énfasis o práctica).");
         }
     }
 

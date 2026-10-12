@@ -36,7 +36,7 @@ class VersionadoTest extends PruebaIntegracion {
                         {"subjectId": "%s", "academicPeriod": "2026-03", "title": "Syllabus Base de Datos I - 2026-03",
                          "sections": [
                            {"sectionType": "justification", "title": "Justificación", "content": "Primera"}]}
-                        """.formatted(ASIG_BASE_DE_DATOS))))
+                        """.formatted(ASIG_ING_SOFTWARE_II))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("BORRADOR"))
                 .andExpect(jsonPath("$.currentVersion").value(1))
@@ -86,7 +86,7 @@ class VersionadoTest extends PruebaIntegracion {
                               "tipos": [{"tipo": "Parcial", "porcentaje": 100}]},
                              {"corte": 3, "label": "III", "porcentaje": 35,
                               "tipos": [{"tipo": "Proyecto", "porcentaje": 100}]}]}]}
-                        """.formatted(ASIG_BASE_DE_DATOS))))
+                        """.formatted(ASIG_ING_SOFTWARE_II))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value(
                         "I: los porcentajes parciales suman 50 % y deben sumar 100 %."));
@@ -94,20 +94,20 @@ class VersionadoTest extends PruebaIntegracion {
 
     @Test
     void renovarSinAjustesCopiaElSyllabusYLoDejaEnElHistorial() throws Exception {
-        String renovado = mvc.perform(como("profesor", post("/api/syllabus/" + BASE_DE_DATOS + "/renew")
+        String renovado = mvc.perform(como("profesor", post("/api/syllabus/" + ING_SOFTWARE_II + "/renew")
                         .content("{\"academicPeriod\": \"2028-01\"}")))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.academicPeriod").value("2028-01"))
-                .andExpect(jsonPath("$.title").value("Syllabus Base de Datos I - 2028-01"))
+                .andExpect(jsonPath("$.title").value("Syllabus Ingeniería de Software II - 2028-01"))
                 .andExpect(jsonPath("$.status").value("ACTIVO"))
                 .andExpect(jsonPath("$.currentVersion").value(1))
                 .andReturn().getResponse().getContentAsString();
         mvc.perform(como("profesor", get("/api/syllabus/" + JsonPath.read(renovado, "$.id") + "/versions")))
                 .andExpect(jsonPath("$[0].changeDescription").value("Renovado sin ajustes respecto al período 2026-01"));
-        mvc.perform(como("profesor", post("/api/syllabus/" + BASE_DE_DATOS + "/renew")
+        mvc.perform(como("profesor", post("/api/syllabus/" + ING_SOFTWARE_II + "/renew")
                         .content("{\"academicPeriod\": \"2028-01\"}")))
                 .andExpect(status().isConflict());
-        mvc.perform(como("estudiante", post("/api/syllabus/" + BASE_DE_DATOS + "/renew")
+        mvc.perform(como("estudiante", post("/api/syllabus/" + ING_SOFTWARE_II + "/renew")
                         .content("{\"academicPeriod\": \"2028-02\"}")))
                 .andExpect(status().isForbidden());
     }

@@ -16,8 +16,6 @@ import org.junit.jupiter.api.Test;
  */
 class ContactoDelSyllabusTest extends PruebaIntegracion {
 
-    private static final String PROFESOR = "40000000-0000-0000-0000-000000000001";
-
     private static final String SYLLABUS = """
             {"subjectId": "%s", "academicPeriod": "2026-02", "title": "Seminario de Investigación - 2026-02",
              "status": "%s",
@@ -33,15 +31,15 @@ class ContactoDelSyllabusTest extends PruebaIntegracion {
     @Test
     void enUnPosgradoSinCoordinacionHayQueAsignarDocenteAntesDeActivar() throws Exception {
         String asignatura = mvc.perform(como("admin", post("/api/subjects").content("""
-                        {"name": "Seminario de Investigación", "code": "MIA901", "credits": 2,
-                         "programId": "%s"}""".formatted(PROGRAMA_MAESTRIA_IA))))
+                        {"name": "Seminario de Investigación", "code": "MING902", "credits": 2,
+                         "programId": "%s"}""".formatted(PROGRAMA_MAESTRIA_INGENIERIA))))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         String id = JsonPath.read(asignatura, "$.id");
 
         mvc.perform(como("admin", post("/api/syllabus").content(SYLLABUS.formatted(id, "ACTIVO"))))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("Maestría en Inteligencia Artificial no tiene correo "
+                .andExpect(jsonPath("$.error").value("Maestría en Ingeniería no tiene correo "
                         + "de coordinación: asigne un docente a la asignatura antes de activar el syllabus."));
 
         mvc.perform(como("admin", put("/api/subjects/" + id + "/assign-professor")

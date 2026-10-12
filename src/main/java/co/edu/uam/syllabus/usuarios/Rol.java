@@ -17,9 +17,10 @@ public enum Rol {
     PROFESOR(20, ESTUDIANTE,
             "syllabus:create", "syllabus:update", "syllabus:export"),
     COORDINADOR_PROGRAMA(30, PROFESOR,
-            "syllabus:delete", "syllabus:versions", "subject:assign", "syllabus:sign"),
-    COORDINADOR_DEPARTAMENTO(40, COORDINADOR_PROGRAMA,
-            "subject:create", "subject:update", "subject:delete", "export:batch"),
+            "syllabus:delete", "syllabus:versions", "subject:assign", "syllabus:sign",
+            // El alcance limita estos permisos a las asignaturas de su posgrado (el pregrado no tiene propias).
+            "subject:create", "subject:update", "subject:delete"),
+    COORDINADOR_DEPARTAMENTO(40, COORDINADOR_PROGRAMA, "export:batch"),
     ADMINISTRADOR(50, COORDINADOR_DEPARTAMENTO,
             "user:read", "user:create", "user:update", "user:delete", "user:permissions", "user:affiliations",
             "faculty:create", "faculty:update", "faculty:delete",

@@ -61,6 +61,8 @@ public class AlmeraPdf {
             Map.entry("bibliography", 6));
 
 
+    private static final String POR_DEFINIR = "Por definir";
+
     /** Tamaño del logo en el encabezado del documento institucional (52,94 × 25,18 mm). */
     private static final double LOGO_ANCHO_MAX = 52.94;
     private static final double LOGO_ALTO_MAX = 25.18;
@@ -165,7 +167,8 @@ public class AlmeraPdf {
         String coordinacion = m.coordinationEmail();
         String docente = coordinacion != null ? "" : m.professor() == null ? "Por asignar" : m.professor().name();
         String correo = coordinacion != null ? coordinacion : m.professor() == null ? "" : m.professor().email();
-        Function<Integer, String> horas = h -> h == null ? "—" : String.valueOf(h);
+        // Un dato que la asignatura aún no tiene se muestra como pendiente, no como «Ninguno».
+        Function<Integer, String> horas = h -> h == null ? POR_DEFINIR : String.valueOf(h);
         List<String> valores = List.of(
                 m.name(), m.code(),
                 m.department() == null ? "No aplica (posgrado)" : m.department().name(),
@@ -173,7 +176,7 @@ public class AlmeraPdf {
                 textoO(m.modality(), "Presencial"),
                 String.valueOf(m.credits()),
                 horas.apply(m.hoursPresencial()), horas.apply(m.hoursDirigido()), horas.apply(m.hoursIndependiente()),
-                textoO(m.prerequisites(), "Ninguno"),
+                textoO(m.prerequisites(), POR_DEFINIR),
                 s.academicPeriod(), docente, correo);
         List<FilaIdentificacion> filas = new ArrayList<>();
         for (int i = 0; i < ROTULOS_IDENTIFICACION.size(); i++) {

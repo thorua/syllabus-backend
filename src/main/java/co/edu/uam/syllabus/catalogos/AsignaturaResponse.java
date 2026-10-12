@@ -13,18 +13,19 @@ public record AsignaturaResponse(
         UUID id, String name, String code, int credits,
         DepartamentoResponse department, ProgramaResponse program, List<EnPlan> programs, Profesor professor,
         String modality, Integer hoursPresencial, Integer hoursDirigido, Integer hoursIndependiente,
-        String prerequisites, boolean isActive, long syllabusCount, Instant createdAt, Instant updatedAt) {
+        String prerequisites, boolean requiresSyllabus, boolean isActive, long syllabusCount, Instant createdAt,
+        Instant updatedAt) {
 
     public record Profesor(UUID id, String name, String email) {}
 
     /** Programa que incluye la asignatura en uno de sus planes de estudio. */
     public record EnPlan(UUID id, String name, String code, Programa.Nivel level, UUID planId, String plan,
-                         boolean planActive, int semester) {
+                         boolean planActive, int semester, PlanAsignatura.Area area) {
 
         public static EnPlan de(PlanAsignatura pa) {
             Programa p = pa.getPlan().getPrograma();
             return new EnPlan(p.getId(), p.getName(), p.getCode(), p.getLevel(), pa.getPlan().getId(),
-                    pa.getPlan().getName(), pa.getPlan().isActive(), pa.getSemester());
+                    pa.getPlan().getName(), pa.getPlan().isActive(), pa.getSemester(), pa.getArea());
         }
     }
 
@@ -36,6 +37,7 @@ public record AsignaturaResponse(
                 planes.stream().map(EnPlan::de).toList(),
                 p == null ? null : new Profesor(p.getId(), p.getName(), p.getEmail()),
                 a.getModality(), a.getHoursPresencial(), a.getHoursDirigido(), a.getHoursIndependiente(),
-                a.getPrerequisites(), a.isActive(), syllabus, a.getCreatedAt(), a.getUpdatedAt());
+                a.getPrerequisites(), a.isRequiresSyllabus(), a.isActive(), syllabus, a.getCreatedAt(),
+                a.getUpdatedAt());
     }
 }

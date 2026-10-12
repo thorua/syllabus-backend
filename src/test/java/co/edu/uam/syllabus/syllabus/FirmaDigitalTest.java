@@ -1,7 +1,15 @@
 package co.edu.uam.syllabus.syllabus;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.everyItem;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.hasItems;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -39,6 +47,7 @@ import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
 
@@ -53,7 +62,7 @@ class FirmaDigitalTest extends PruebaIntegracion {
     private static final String CLAVE = "Uam2026!";
 
     private static final String SYLLABUS = """
-            {"subjectId": "%s", "academicPeriod": "%s", "title": "Matemáticas I - %s", "status": "ACTIVO",
+            {"subjectId": "%s", "academicPeriod": "%s", "title": "Matemáticas Básicas - %s", "status": "ACTIVO",
              "sections": [
                {"sectionType": "identification", "title": "Identificación", "content": ""},
                {"sectionType": "justification", "title": "Justificación", "content": "%s"},
@@ -71,27 +80,27 @@ class FirmaDigitalTest extends PruebaIntegracion {
         mvc.perform(como("registro", get(firmas)))
                 .andExpect(jsonPath("$.state").value("SIN_FIRMAS"))
                 .andExpect(jsonPath("$.nextStep").value("DEPARTAMENTO"))
-                .andExpect(jsonPath("$.nextSigner").value("Coordinación del Departamento de Matemáticas"))
+                .andExpect(jsonPath("$.nextSigner").value("Coordinación del Departamento de Física y Matemáticas"))
                 .andExpect(jsonPath("$.canSign").value(false));
         mvc.perform(firmar("registro", id, 1, CLAVE)).andExpect(status().isForbidden());
         mvc.perform(firmar("coordinador", id, 1, CLAVE)).andExpect(status().isForbidden());
         mvc.perform(como("coordinador.matematicas", get(firmas)))
                 .andExpect(jsonPath("$.canSign").value(true))
                 .andExpect(jsonPath("$.storedCertificate.subject").value(
-                        "CN=Jorge Iván Restrepo,OU=Certificado de prueba (demo),O=Universidad Autonoma de Manizales,C=CO"));
+                        "CN=Sandra Milena Arango,OU=Certificado de prueba (demo),O=Universidad Autonoma de Manizales,C=CO"));
 
         byte[] vistaPrevia = mvc.perform(como("coordinador.matematicas", get(firmas + "/preview")))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsByteArray();
         assertThat(texto(vistaPrevia)).contains("Firma digital de la coordinación",
-                "Coordinación del Departamento de Matemáticas", "Firma digital de Registro Académico");
+                "Coordinación del Departamento de Física y Matemáticas", "Firma digital de Registro Académico");
 
         mvc.perform(firmar("coordinador.matematicas", id, 1, "clave-equivocada"))
                 .andExpect(status().isBadRequest());
         mvc.perform(firmar("coordinador.matematicas", id, 1, CLAVE))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.state").value("PENDIENTE_REGISTRO"))
-                .andExpect(jsonPath("$.signatures[0].signerName").value("Jorge Iván Restrepo"))
+                .andExpect(jsonPath("$.signatures[0].signerName").value("Sandra Milena Arango"))
                 .andExpect(jsonPath("$.nextStep").value("REGISTRO"));
         // Hasta que Registro firme, se exporta el PDF sin firmas.
         assertThat(firmasValidas(exportar(id))).isZero();
@@ -105,14 +114,14 @@ class FirmaDigitalTest extends PruebaIntegracion {
         mvc.perform(como("admin", get("/api/syllabus/" + id)))
                 .andExpect(jsonPath("$.verification").value("VERIFICADO"));
         String malla = mvc.perform(como("admin",
-                        get("/api/study-plans/" + PLAN_SISTEMAS_2026 + "/curriculum?academicPeriod=2027-01")))
+                        get("/api/study-plans/" + PLAN_SISTEMAS + "/curriculum?academicPeriod=2027-01")))
                 .andReturn().getResponse().getContentAsString();
-        List<String> estados = JsonPath.read(malla, "$.semesters[*].subjects[?(@.code == 'MAT100')].state");
+        List<String> estados = JsonPath.read(malla, "$.semesters[*].subjects[?(@.code == 'DFM001')].state");
         assertThat(estados).containsExactly("VERIFICADO");
 
         // Una edición crea una versión nueva, que vuelve a necesitar las firmas.
         mvc.perform(como("coordinador.matematicas", put("/api/syllabus/" + id).content("""
-                        {"title": "Matemáticas I - 2027-01", "status": "ACTIVO", "changeDescription": "Ajuste",
+                        {"title": "Matemáticas Básicas - 2027-01", "status": "ACTIVO", "changeDescription": "Ajuste",
                          "baseVersion": 1,
                          "sections": %s}""".formatted(secciones("Justificación ajustada")))))
                 .andExpect(status().isOk())
@@ -122,8 +131,43 @@ class FirmaDigitalTest extends PruebaIntegracion {
     }
 
     @Test
+    void cadaFirmanteVeSusPendientesFirmaPorLoteYRecibeAviso() throws Exception {
+        String uno = crear("2027-03");
+        String dos = crear("2028-02");
+        // Al quedar vigentes, se avisa a la coordinación del departamento que ofrece la asignatura.
+        verify(correo, atLeastOnce()).send(argThat((SimpleMailMessage m) -> m.getTo()[0]
+                .equals("coordinador.matematicas@autonoma.edu.co") && m.getSubject().contains("DFM001 · 2028-02")));
+
+        mvc.perform(como("coordinador.matematicas", get("/api/signatures/pending")))
+                .andExpect(jsonPath("$[*].id", hasItems(uno, dos)))
+                .andExpect(jsonPath("$[*].step", everyItem(is("DEPARTAMENTO"))));
+        mvc.perform(como("registro", get("/api/signatures/pending")))
+                .andExpect(jsonPath("$[*].id", not(hasItems(uno))));
+
+        mvc.perform(lote("coordinador.matematicas", "[{\"id\": \"%s\", \"version\": 1}, {\"id\": \"%s\", \"version\": 1}]"
+                        .formatted(uno, dos)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].signed", everyItem(is(true))))
+                .andExpect(jsonPath("$[*].state", everyItem(is("PENDIENTE_REGISTRO"))));
+        verify(correo, atLeastOnce()).send(argThat((SimpleMailMessage m) -> m.getTo()[0]
+                .equals("registro@autonoma.edu.co") && m.getSubject().contains("DFM001 · 2027-03")));
+
+        // Registro firma por lote; una versión que ya no es la vigente no se firma, las demás sí.
+        mvc.perform(lote("registro", "[{\"id\": \"%s\", \"version\": 1}, {\"id\": \"%s\", \"version\": 9}]"
+                        .formatted(uno, dos)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].signed").value(true))
+                .andExpect(jsonPath("$[0].state").value("VERIFICADO"))
+                .andExpect(jsonPath("$[1].signed").value(false));
+        mvc.perform(como("registro", get("/api/signatures/pending")))
+                .andExpect(jsonPath("$[*].id", hasItem(dos)))
+                .andExpect(jsonPath("$[*].id", not(hasItem(uno))));
+        mvc.perform(como("estudiante", get("/api/signatures/pending"))).andExpect(status().isForbidden());
+    }
+
+    @Test
     void soloSeFirmaUnSyllabusActivoYElAdministradorNoFirma() throws Exception {
-        mvc.perform(como("coordinador", get("/api/syllabus/" + ALGORITMOS_BORRADOR + "/signatures/preview")))
+        mvc.perform(como("coordinador", get("/api/syllabus/" + BASES_DE_DATOS_BORRADOR + "/signatures/preview")))
                 .andExpect(status().isBadRequest());
         String id = crear("2027-02");
         mvc.perform(como("admin", get("/api/syllabus/" + id + "/signatures")))
@@ -159,7 +203,7 @@ class FirmaDigitalTest extends PruebaIntegracion {
 
     private String crear(String periodo) throws Exception {
         String respuesta = mvc.perform(como("coordinador.matematicas", post("/api/syllabus")
-                        .content(SYLLABUS.formatted(ASIG_MATEMATICAS_I, periodo, periodo, "Justificación", ""))))
+                        .content(SYLLABUS.formatted(ASIG_MATEMATICAS_BASICAS, periodo, periodo, "Justificación", ""))))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return JsonPath.read(respuesta, "$.id");
@@ -174,6 +218,13 @@ class FirmaDigitalTest extends PruebaIntegracion {
             throws Exception {
         MockMultipartHttpServletRequestBuilder peticion = multipart("/api/syllabus/" + id + "/signatures");
         peticion.param("version", String.valueOf(version)).param("password", clave)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token(usuario));
+        return peticion;
+    }
+
+    private MockMultipartHttpServletRequestBuilder lote(String usuario, String items) throws Exception {
+        MockMultipartHttpServletRequestBuilder peticion = multipart("/api/signatures/batch");
+        peticion.param("items", items).param("password", CLAVE)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token(usuario));
         return peticion;
     }

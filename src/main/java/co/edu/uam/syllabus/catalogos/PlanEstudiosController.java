@@ -66,7 +66,8 @@ public class PlanEstudiosController {
             @AuthenticationPrincipal UsuarioAutenticado actor, @PathVariable UUID id, @PathVariable UUID subjectId,
             @RequestParam String academicPeriod,
             @Valid @RequestBody PlanEstudiosService.AsignaturaEnPlanRequest request) {
-        return service.ubicarAsignatura(actor.id(), id, subjectId, request.semester(), periodo(academicPeriod));
+        return service.ubicarAsignatura(actor.id(), id, subjectId, request.semester(), request.area(),
+                periodo(academicPeriod));
     }
 
     @DeleteMapping("/{id}/subjects/{subjectId}")

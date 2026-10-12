@@ -12,9 +12,7 @@ import org.junit.jupiter.api.Test;
 /** UC5 departamentos, UC6 programas, UC7 asignaturas y UC8 asignar profesor. */
 class CatalogosTest extends PruebaIntegracion {
 
-    private static final String REDES = "30000000-0000-0000-0000-000000000003";
-    private static final String PROFESOR = "40000000-0000-0000-0000-000000000001";
-    private static final String ESTUDIANTE = "40000000-0000-0000-0000-000000000005";
+    private static final String REDES = ASIG_REDES_LAN.toString();
 
     @Test
     void losCodigosYNombresNoSeRepitenYNoSeDesactivaLoQueTieneDependencias() throws Exception {
@@ -70,7 +68,7 @@ class CatalogosTest extends PruebaIntegracion {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.coordinationEmail").doesNotExist())
                 .andExpect(jsonPath("$.department.coordinationEmail")
-                        .value("computacion@autonoma.edu.co"));
+                        .value("computacionales@autonoma.edu.co"));
     }
 
     @Test
@@ -79,7 +77,7 @@ class CatalogosTest extends PruebaIntegracion {
         mvc.perform(como("coordinador", put("/api/subjects/" + REDES + "/assign-professor")
                         .content(asignar.formatted(ESTUDIANTE))))
                 .andExpect(status().isBadRequest());
-        // coordinador.programa no coordina Ing. de Sistemas, el programa de Redes.
+        // coordinador.programa no coordina Ing. de Sistemas, el programa de Redes LAN.
         mvc.perform(como("coordinador.programa", put("/api/subjects/" + REDES + "/assign-professor")
                         .content(asignar.formatted(PROFESOR))))
                 .andExpect(status().isForbidden());
@@ -96,7 +94,7 @@ class CatalogosTest extends PruebaIntegracion {
 
     @Test
     void noSeDesactivaUnaAsignaturaConSyllabusVigente() throws Exception {
-        mvc.perform(como("admin", delete("/api/subjects/" + ASIG_BASE_DE_DATOS)))
+        mvc.perform(como("admin", delete("/api/subjects/" + ASIG_ING_SOFTWARE_II)))
                 .andExpect(status().isConflict());
     }
 }
