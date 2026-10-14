@@ -13,6 +13,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.lang.NonNull;
+import org.springframework.lang.Nullable;
 
 public interface SyllabusRepository extends JpaRepository<Syllabus, UUID>, JpaSpecificationExecutor<Syllabus> {
 
@@ -20,13 +22,15 @@ public interface SyllabusRepository extends JpaRepository<Syllabus, UUID>, JpaSp
     @EntityGraph(attributePaths = {"asignatura", "asignatura.programa", "asignatura.programa.facultad",
         "asignatura.programa.departamento", "asignatura.programa.departamento.facultad",
         "asignatura.departamento", "asignatura.departamento.facultad", "asignatura.profesor", "createdBy"})
-    Page<Syllabus> findAll(Specification<Syllabus> spec, Pageable pageable);
+    @NonNull
+    Page<Syllabus> findAll(@Nullable Specification<Syllabus> spec, @NonNull Pageable pageable);
 
     @Override
     @EntityGraph(attributePaths = {"asignatura", "asignatura.programa", "asignatura.programa.facultad",
         "asignatura.programa.departamento", "asignatura.programa.departamento.facultad",
         "asignatura.departamento", "asignatura.departamento.facultad", "asignatura.profesor", "createdBy"})
-    List<Syllabus> findAll(Specification<Syllabus> spec, Sort sort);
+    @NonNull
+    List<Syllabus> findAll(@Nullable Specification<Syllabus> spec, @NonNull Sort sort);
 
     @EntityGraph(attributePaths = {"asignatura", "asignatura.programa", "asignatura.programa.facultad",
         "asignatura.programa.departamento", "asignatura.programa.departamento.facultad",

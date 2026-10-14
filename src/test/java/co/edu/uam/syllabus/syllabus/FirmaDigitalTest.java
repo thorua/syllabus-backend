@@ -135,8 +135,7 @@ class FirmaDigitalTest extends PruebaIntegracion {
         String uno = crear("2027-03");
         String dos = crear("2028-02");
         // Al quedar vigentes, se avisa a la coordinación del departamento que ofrece la asignatura.
-        verify(correo, atLeastOnce()).send(argThat((SimpleMailMessage m) -> m.getTo()[0]
-                .equals("coordinador.matematicas@autonoma.edu.co") && m.getSubject().contains("DFM001 · 2028-02")));
+        verify(correo, atLeastOnce()).send(argThat((SimpleMailMessage m) -> aviso(m, "coordinador.matematicas@autonoma.edu.co", "DFM001 · 2028-02")));
 
         mvc.perform(como("coordinador.matematicas", get("/api/signatures/pending")))
                 .andExpect(jsonPath("$[*].id", hasItems(uno, dos)))
@@ -149,8 +148,7 @@ class FirmaDigitalTest extends PruebaIntegracion {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[*].signed", everyItem(is(true))))
                 .andExpect(jsonPath("$[*].state", everyItem(is("PENDIENTE_REGISTRO"))));
-        verify(correo, atLeastOnce()).send(argThat((SimpleMailMessage m) -> m.getTo()[0]
-                .equals("registro@autonoma.edu.co") && m.getSubject().contains("DFM001 · 2027-03")));
+        verify(correo, atLeastOnce()).send(argThat((SimpleMailMessage m) -> aviso(m, "registro@autonoma.edu.co", "DFM001 · 2027-03")));
 
         // Registro firma por lote; una versión que ya no es la vigente no se firma, las demás sí.
         mvc.perform(lote("registro", "[{\"id\": \"%s\", \"version\": 1}, {\"id\": \"%s\", \"version\": 9}]"
@@ -220,6 +218,14 @@ class FirmaDigitalTest extends PruebaIntegracion {
         peticion.param("version", String.valueOf(version)).param("password", clave)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token(usuario));
         return peticion;
+    }
+
+    /** Correo de aviso de firma dirigido a la persona indicada y sobre el syllabus indicado. */
+    private static boolean aviso(SimpleMailMessage m, String para, String asunto) {
+        String[] destinatarios = m.getTo();
+        String titulo = m.getSubject();
+        return destinatarios != null && List.of(destinatarios).contains(para) && titulo != null
+                && titulo.contains(asunto);
     }
 
     private MockMultipartHttpServletRequestBuilder lote(String usuario, String items) throws Exception {

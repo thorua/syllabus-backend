@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import co.edu.uam.syllabus.PruebaIntegracion;
+import java.util.Objects;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpHeaders;
@@ -82,7 +83,7 @@ class AccesoTest extends PruebaIntegracion {
         ArgumentCaptor<SimpleMailMessage> enviado = ArgumentCaptor.forClass(SimpleMailMessage.class);
         verify(correo).send(enviado.capture());
         assertThat(enviado.getValue().getTo()).containsExactly("registro@autonoma.edu.co");
-        String enlace = enviado.getValue().getText().lines()
+        String enlace = Objects.requireNonNull(enviado.getValue().getText()).lines()
                 .filter(l -> l.contains("/reset-password?token=")).findFirst().orElseThrow().strip();
         String token = enlace.substring(enlace.indexOf("token=") + 6);
 

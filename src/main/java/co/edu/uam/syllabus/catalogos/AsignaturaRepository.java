@@ -9,13 +9,16 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.lang.NonNull;
+import org.springframework.lang.Nullable;
 
 public interface AsignaturaRepository extends JpaRepository<Asignatura, UUID>, JpaSpecificationExecutor<Asignatura> {
 
     @Override
     @EntityGraph(attributePaths = {"programa", "programa.facultad", "programa.departamento", "programa.departamento.facultad",
         "departamento", "departamento.facultad", "profesor"})
-    List<Asignatura> findAll(Specification<Asignatura> spec, Sort sort);
+    @NonNull
+    List<Asignatura> findAll(@Nullable Specification<Asignatura> spec, @NonNull Sort sort);
 
     @EntityGraph(attributePaths = {"programa", "programa.facultad", "programa.departamento", "programa.departamento.facultad",
         "departamento", "departamento.facultad", "profesor"})

@@ -9,12 +9,15 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.lang.NonNull;
+import org.springframework.lang.Nullable;
 
 interface AuditLogRepository extends JpaRepository<AuditLog, UUID>, JpaSpecificationExecutor<AuditLog> {
 
     @Override
     @EntityGraph(attributePaths = "usuario")
-    Page<AuditLog> findAll(Specification<AuditLog> spec, Pageable pageable);
+    @NonNull
+    Page<AuditLog> findAll(@Nullable Specification<AuditLog> spec, @NonNull Pageable pageable);
 
     @Query("select distinct a.entity from AuditLog a order by a.entity")
     List<String> entidades();
