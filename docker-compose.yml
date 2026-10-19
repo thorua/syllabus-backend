@@ -1,0 +1,74 @@
+name: syllabus
+
+services:
+  db:
+    container_name: syllabus-db
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432" # solo desde este equipo: DBeaver/pgAdmin o el backend con ./mvnw
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [syllabus-net]
+
+  # Solo en desarrollo (COMPOSE_PROFILES=dev): SMTP de prueba con bandeja web para la recuperación (UC2).
+  mailpit:
+    container_name: syllabus-mailpit
+    image: axllent/mailpit
+    profiles: [dev]
+    ports:
+      - "127.0.0.1:8025:8025"
+    networks: [syllabus-net]
+
+  backend:
+    container_name: syllabus-backend
+    build: .
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      FLYWAY_LOCATIONS: ${FLYWAY_LOCATIONS}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      MAIL_HOST: ${MAIL_HOST}
+      MAIL_PORT: ${MAIL_PORT}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_STARTTLS: ${MAIL_STARTTLS:-false}
+      MAIL_FROM: ${MAIL_FROM}
+      APP_URL: ${APP_URL}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+    volumes:
+      - uploads:/app/uploads
+    ports:
+      - "127.0.0.1:8080:8080" # solo desde este equipo (npm run dev); el público entra por el frontend
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [syllabus-net]
+
+  frontend:
+    container_name: syllabus-frontend
+    build: ../syllabus-frontend # el repo del frontend, clonado junto a este
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [syllabus-net]
+
+volumes:
+  db-data:
+  uploads:
+
+networks:
+  syllabus-net:
