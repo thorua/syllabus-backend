@@ -218,6 +218,7 @@ public class FirmaService {
 
         String cargo = cargo(paso, s.getAsignatura());
         byte[] firmado = firmaPdf.firmar(documentoPorFirmar(actor, s, hechas), certificado,
+                imagenDeFirma(actor.id()).orElse(null),
                 paso == Verificacion.Paso.DEPARTAMENTO ? ROTULO_COORDINACION : ROTULO_REGISTRO, cargo,
                 "Aprobación del syllabus " + s.getAsignatura().getCode() + " " + s.getAcademicPeriod()
                         + " (versión " + actual + ")");
@@ -273,6 +274,34 @@ public class FirmaService {
         certificados.save(registro);
         eventos.publishEvent(AuditEvent.de(usuario, "UPDATE", "certificate", usuario).con(Map.of(
                 "name", "Certificado de firma digital", "certificate", c.titular(), "notAfter", c.vence().toString())));
+    }
+
+    // ---------- Imagen de la firma (rúbrica) ----------
+
+    @Transactional(readOnly = true)
+    public Optional<byte[]> imagenDeFirma(UUID usuario) {
+        return jdbc.sql("SELECT image FROM user_signature_images WHERE user_id = ?").param(usuario)
+                .query(byte[].class).optional();
+    }
+
+    /** Registra (o reemplaza) la rúbrica: una imagen subida o dibujada, que se limpia antes de guardarla. */
+    @Transactional
+    public void guardarImagenDeFirma(UUID usuario, MultipartFile archivo) {
+        byte[] rubrica = firmaPdf.rubrica(bytes(archivo));
+        jdbc.sql("""
+                INSERT INTO user_signature_images (user_id, image) VALUES (?, ?)
+                ON CONFLICT (user_id) DO UPDATE SET image = excluded.image, uploaded_at = now()""")
+                .params(usuario, rubrica).update();
+        eventos.publishEvent(AuditEvent.de(usuario, "UPDATE", "signature-image", usuario)
+                .con(Map.of("name", "Imagen de la firma")));
+    }
+
+    @Transactional
+    public void eliminarImagenDeFirma(UUID usuario) {
+        if (jdbc.sql("DELETE FROM user_signature_images WHERE user_id = ?").param(usuario).update() > 0) {
+            eventos.publishEvent(AuditEvent.de(usuario, "DELETE", "signature-image", usuario)
+                    .con(Map.of("name", "Imagen de la firma")));
+        }
     }
 
     private byte[] certificadoRegistrado(UUID usuario) {

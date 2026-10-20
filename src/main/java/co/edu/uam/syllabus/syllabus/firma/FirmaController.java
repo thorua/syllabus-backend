@@ -105,4 +105,26 @@ public class FirmaController {
         service.eliminarCertificado(actor.id());
         return Map.of("message", "Certificado eliminado");
     }
+
+    @GetMapping(path = "/api/auth/me/signature-image", produces = MediaType.IMAGE_PNG_VALUE)
+    @PreAuthorize("hasAuthority('syllabus:sign')")
+    public ResponseEntity<byte[]> imagenDeFirma(@AuthenticationPrincipal UsuarioAutenticado actor) {
+        return service.imagenDeFirma(actor.id()).map(ResponseEntity::ok)
+                .orElse(ResponseEntity.noContent().build());
+    }
+
+    @PutMapping(path = "/api/auth/me/signature-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('syllabus:sign')")
+    public Map<String, String> guardarImagenDeFirma(@AuthenticationPrincipal UsuarioAutenticado actor,
+                                                    @RequestParam MultipartFile image) {
+        service.guardarImagenDeFirma(actor.id(), image);
+        return Map.of("message", "Imagen de la firma registrada");
+    }
+
+    @DeleteMapping("/api/auth/me/signature-image")
+    @PreAuthorize("hasAuthority('syllabus:sign')")
+    public Map<String, String> eliminarImagenDeFirma(@AuthenticationPrincipal UsuarioAutenticado actor) {
+        service.eliminarImagenDeFirma(actor.id());
+        return Map.of("message", "Imagen de la firma eliminada");
+    }
 }

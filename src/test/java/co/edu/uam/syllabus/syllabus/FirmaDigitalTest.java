@@ -20,6 +20,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import co.edu.uam.syllabus.PruebaIntegracion;
 import com.jayway.jsonpath.JsonPath;
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.math.BigInteger;
 import java.security.KeyPair;
@@ -31,9 +36,18 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
 import java.util.List;
+import javax.imageio.ImageIO;
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDResources;
+import org.apache.pdfbox.pdmodel.graphics.PDXObject;
+import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationWidget;
 import org.apache.pdfbox.pdmodel.interactive.digitalsignature.PDSignature;
+import org.apache.pdfbox.pdmodel.interactive.form.PDField;
+import org.apache.pdfbox.pdmodel.interactive.form.PDSignatureField;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.cert.X509CertificateHolder;
@@ -199,6 +213,34 @@ class FirmaDigitalTest extends PruebaIntegracion {
         mvc.perform(como("profesor", get("/api/auth/me/certificate"))).andExpect(status().isNoContent());
     }
 
+    @Test
+    void laImagenDeLaFirmaRegistradaSeDibujaEnElSelloYElPdfSigueValido() throws Exception {
+        String id = crear("2028-03");
+        try {
+            mvc.perform(como("registro", get("/api/auth/me/signature-image"))).andExpect(status().isNoContent());
+            mvc.perform(conImagen("registro", jpg(new Color(250, 250, 248))))
+                    .andExpect(status().isOk());
+            byte[] guardada = mvc.perform(como("registro", get("/api/auth/me/signature-image")))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsByteArray();
+            BufferedImage png = ImageIO.read(new ByteArrayInputStream(guardada));
+            assertThat(png.getWidth()).as("recortada a lo dibujado").isLessThan(400);
+            assertThat(png.getRGB(0, 0) >>> 24).as("el fondo blanco queda transparente").isZero();
+            mvc.perform(conImagen("registro", "no es una imagen".getBytes())).andExpect(status().isBadRequest());
+            mvc.perform(como("estudiante", get("/api/auth/me/signature-image"))).andExpect(status().isForbidden());
+
+            // La coordinación no tiene imagen (sello con el nombre); Registro sí (sello con la rúbrica).
+            mvc.perform(firmar("coordinador.matematicas", id, 1, CLAVE)).andExpect(status().isOk());
+            mvc.perform(firmar("registro", id, 1, CLAVE)).andExpect(status().isOk());
+            byte[] pdf = exportar(id);
+            assertThat(firmasValidas(pdf)).isEqualTo(2);
+            assertThat(imagenesEnSellos(pdf)).isEqualTo(1);
+        } finally {
+            mvc.perform(como("registro", delete("/api/auth/me/signature-image"))).andExpect(status().isOk());
+        }
+        mvc.perform(como("registro", get("/api/auth/me/signature-image"))).andExpect(status().isNoContent());
+    }
+
     private String crear(String periodo) throws Exception {
         String respuesta = mvc.perform(como("coordinador.matematicas", post("/api/syllabus")
                         .content(SYLLABUS.formatted(ASIG_MATEMATICAS_BASICAS, periodo, periodo, "Justificación", ""))))
@@ -241,6 +283,62 @@ class FirmaDigitalTest extends PruebaIntegracion {
                 .file(new MockMultipartFile("certificate", "firma.p12", "application/x-pkcs12", p12));
         peticion.param("password", clave).header(HttpHeaders.AUTHORIZATION, "Bearer " + token(usuario));
         return peticion;
+    }
+
+    private MockMultipartHttpServletRequestBuilder conImagen(String usuario, byte[] imagen) throws Exception {
+        MockMultipartHttpServletRequestBuilder peticion = multipart(HttpMethod.PUT, "/api/auth/me/signature-image")
+                .file(new MockMultipartFile("image", "firma.jpg", "image/jpeg", imagen));
+        peticion.header(HttpHeaders.AUTHORIZATION, "Bearer " + token(usuario));
+        return peticion;
+    }
+
+    /** Foto de una firma: un trazo oscuro sobre papel casi blanco, en JPG (sin transparencia). */
+    private static byte[] jpg(Color papel) throws Exception {
+        BufferedImage foto = new BufferedImage(800, 400, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = foto.createGraphics();
+        g.setColor(papel);
+        g.fillRect(0, 0, 800, 400);
+        g.setColor(new Color(20, 30, 90));
+        g.setStroke(new BasicStroke(6));
+        g.drawLine(250, 220, 330, 150);
+        g.drawLine(330, 150, 420, 240);
+        g.drawLine(420, 240, 520, 170);
+        g.dispose();
+        ByteArrayOutputStream salida = new ByteArrayOutputStream();
+        ImageIO.write(foto, "jpg", salida);
+        return salida.toByteArray();
+    }
+
+    /** Imágenes dentro de las apariencias de los campos de firma (los sellos visibles). */
+    private static int imagenesEnSellos(byte[] pdf) throws Exception {
+        try (PDDocument documento = Loader.loadPDF(pdf)) {
+            int total = 0;
+            for (PDField campo : documento.getDocumentCatalog().getAcroForm().getFieldTree()) {
+                if (campo instanceof PDSignatureField firma) {
+                    for (PDAnnotationWidget widget : firma.getWidgets()) {
+                        total += imagenes(widget.getAppearance().getNormalAppearance().getAppearanceStream()
+                                .getResources());
+                    }
+                }
+            }
+            return total;
+        }
+    }
+
+    private static int imagenes(PDResources recursos) throws Exception {
+        int total = 0;
+        if (recursos == null) {
+            return 0;
+        }
+        for (COSName nombre : recursos.getXObjectNames()) {
+            PDXObject objeto = recursos.getXObject(nombre);
+            if (objeto instanceof PDImageXObject) {
+                total++;
+            } else if (objeto instanceof PDFormXObject forma) {
+                total += imagenes(forma.getResources());
+            }
+        }
+        return total;
     }
 
     private byte[] exportar(String id) throws Exception {

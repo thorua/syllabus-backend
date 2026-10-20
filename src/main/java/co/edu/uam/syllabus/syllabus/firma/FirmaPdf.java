@@ -1,5 +1,8 @@
 package co.edu.uam.syllabus.syllabus.firma;
 
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -20,6 +23,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
+import javax.imageio.ImageIO;
 import javax.naming.InvalidNameException;
 import javax.naming.ldap.LdapName;
 import javax.naming.ldap.Rdn;
@@ -34,6 +38,7 @@ import org.apache.pdfbox.pdmodel.common.PDStream;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationWidget;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceDictionary;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceStream;
@@ -169,10 +174,73 @@ public class FirmaPdf {
     }
 
     /**
+     * Limpia la imagen de la firma manuscrita (subida o dibujada): el fondo claro queda transparente,
+     * se recorta a lo dibujado y se reduce a un tamaño moderado. Devuelve un PNG.
+     */
+    public byte[] rubrica(byte[] archivo) {
+        BufferedImage original;
+        try {
+            original = ImageIO.read(new ByteArrayInputStream(archivo));
+        } catch (IOException e) {
+            original = null;
+        }
+        if (original == null) {
+            throw invalido("La imagen de la firma debe ser PNG o JPG.");
+        }
+        int ancho = original.getWidth();
+        int alto = original.getHeight();
+        BufferedImage limpia = new BufferedImage(ancho, alto, BufferedImage.TYPE_INT_ARGB);
+        int minX = ancho;
+        int minY = alto;
+        int maxX = -1;
+        int maxY = -1;
+        for (int y = 0; y < alto; y++) {
+            for (int x = 0; x < ancho; x++) {
+                int argb = original.getRGB(x, y);
+                int opacidad = argb >>> 24;
+                int luz = Math.min((argb >> 16) & 0xFF, Math.min((argb >> 8) & 0xFF, argb & 0xFF));
+                if (opacidad < 40 || luz > 215) {
+                    continue;
+                }
+                // El borde del trazo se desvanece en vez de cortarse, para que no quede un halo blanco.
+                int alfa = luz > 160 ? opacidad * (215 - luz) / 55 : opacidad;
+                limpia.setRGB(x, y, (alfa << 24) | (argb & 0xFFFFFF));
+                minX = Math.min(minX, x);
+                minY = Math.min(minY, y);
+                maxX = Math.max(maxX, x);
+                maxY = Math.max(maxY, y);
+            }
+        }
+        if (maxX < 0) {
+            throw invalido("La imagen no tiene trazos: dibuje su firma o suba una imagen donde se vea.");
+        }
+        BufferedImage recorte = limpia.getSubimage(minX, minY, maxX - minX + 1, maxY - minY + 1);
+        double escala = Math.min(1, Math.min(900.0 / recorte.getWidth(), 300.0 / recorte.getHeight()));
+        if (escala < 1) {
+            int w = Math.max(1, (int) Math.round(recorte.getWidth() * escala));
+            int h = Math.max(1, (int) Math.round(recorte.getHeight() * escala));
+            BufferedImage reducida = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g = reducida.createGraphics();
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+            g.drawImage(recorte, 0, 0, w, h, null);
+            g.dispose();
+            recorte = reducida;
+        }
+        try (ByteArrayOutputStream salida = new ByteArrayOutputStream()) {
+            ImageIO.write(recorte, "png", salida);
+            return salida.toByteArray();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    /**
      * Firma el PDF. El sello visible se ubica sobre la casilla cuyo rótulo es {@code rotulo}; si el
      * documento no la tiene, la firma queda sin sello (sigue siendo válida en el panel de firmas).
+     * Con {@code rubrica} (PNG de {@link #rubrica}) el sello muestra la firma manuscrita; sin ella,
+     * el nombre en grande como la apariencia predeterminada de Acrobat.
      */
-    public byte[] firmar(byte[] pdf, Certificado c, String rotulo, String cargo, String motivo) {
+    public byte[] firmar(byte[] pdf, Certificado c, byte[] rubrica, String rotulo, String cargo, String motivo) {
         try (PDDocument documento = Loader.loadPDF(pdf);
              ByteArrayOutputStream salida = new ByteArrayOutputStream()) {
             PDSignature firma = new PDSignature();
@@ -189,9 +257,8 @@ public class FirmaPdf {
                 opciones.setPreferredSignatureSize(SignatureOptions.DEFAULT_SIGNATURE_SIZE * 2);
                 if (casilla != null) {
                     opciones.setPage(casilla.pagina());
-                    opciones.setVisualSignature(sello(documento, casilla, List.of(
-                            "Firmado digitalmente por:", c.nombre(), cargo,
-                            "Fecha: " + FECHA.format(ahora.toInstant()) + " (hora de Colombia)")));
+                    opciones.setVisualSignature(sello(documento, casilla, c.nombre(), cargo, rubrica,
+                            FECHA.format(ahora.toInstant())));
                 }
                 documento.addSignature(firma, contenido -> cms(contenido, c), opciones);
                 documento.saveIncremental(salida);
@@ -253,8 +320,9 @@ public class FirmaPdf {
         }
     }
 
-    /** Documento de una página con el campo de firma y su apariencia: el texto del sello. */
-    private static InputStream sello(PDDocument origen, Casilla casilla, List<String> lineas) throws IOException {
+    /** Documento de una página con el campo de firma y su apariencia: la rúbrica o el nombre, y los datos. */
+    private static InputStream sello(PDDocument origen, Casilla casilla, String nombre, String cargo, byte[] rubrica,
+                                     String fecha) throws IOException {
         try (PDDocument plantilla = new PDDocument(); ByteArrayOutputStream salida = new ByteArrayOutputStream()) {
             PDPage pagina = new PDPage(origen.getPage(casilla.pagina()).getMediaBox());
             plantilla.addPage(pagina);
@@ -279,21 +347,108 @@ public class FirmaPdf {
             apariencia.setNormalAppearance(flujo);
             widget.setAppearance(apariencia);
 
-            PDType1Font normal = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
-            PDType1Font negrita = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
             try (PDPageContentStream contenido = new PDPageContentStream(plantilla, flujo)) {
-                contenido.beginText();
-                contenido.newLineAtOffset(2 * MM, r.getHeight() - 4 * MM);
-                for (int i = 0; i < lineas.size(); i++) {
-                    contenido.setFont(i == 1 ? negrita : normal, i == 1 ? 9 : 7.5f);
-                    contenido.showText(latin1(lineas.get(i)));
-                    contenido.newLineAtOffset(0, -3.8f * MM);
+                if (rubrica != null) {
+                    conRubrica(contenido, PDImageXObject.createFromByteArray(plantilla, rubrica, "rubrica"),
+                            r.getWidth(), r.getHeight(), nombre, cargo, fecha);
+                } else {
+                    comoAcrobat(contenido, r.getWidth(), r.getHeight(), nombre, cargo, fecha);
                 }
-                contenido.endText();
             }
             plantilla.save(salida);
             return new ByteArrayInputStream(salida.toByteArray());
         }
+    }
+
+    private static final PDType1Font NORMAL = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+    private static final PDType1Font NEGRITA = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
+
+    /** La firma manuscrita arriba, sobre una línea, y debajo el nombre, el cargo y la fecha. */
+    private static void conRubrica(PDPageContentStream contenido, PDImageXObject imagen, float ancho, float alto,
+                                   String nombre, String cargo, String fecha) throws IOException {
+        float base = 9 * MM;
+        float maxAncho = ancho - 4 * MM;
+        float maxAlto = alto - base - 1 * MM;
+        float escala = Math.min(maxAncho / imagen.getWidth(), maxAlto / imagen.getHeight());
+        float w = imagen.getWidth() * escala;
+        float h = imagen.getHeight() * escala;
+        contenido.drawImage(imagen, (ancho - w) / 2, base + 0.5f * MM, w, h);
+
+        contenido.setStrokingColor(0.55f);
+        contenido.setLineWidth(0.4f);
+        contenido.moveTo(2 * MM, base);
+        contenido.lineTo(ancho - 2 * MM, base);
+        contenido.stroke();
+
+        texto(contenido, NEGRITA, 7.5f, nombre, 2 * MM, base - 2.9f * MM, maxAncho);
+        texto(contenido, NORMAL, 6.5f, cargo, 2 * MM, base - 5.4f * MM, maxAncho);
+        texto(contenido, NORMAL, 6.5f, "Firmado digitalmente el " + fecha + " (hora de Colombia)",
+                2 * MM, base - 7.9f * MM, maxAncho);
+    }
+
+    /** Como la apariencia predeterminada de Acrobat: el nombre en grande a la izquierda y los datos a la derecha. */
+    private static void comoAcrobat(PDPageContentStream contenido, float ancho, float alto, String nombre,
+                                    String cargo, String fecha) throws IOException {
+        float mitad = ancho * 0.45f;
+        float tamano = 14;
+        List<String> renglones = renglones(NEGRITA, tamano, nombre, mitad - 3 * MM);
+        while ((renglones.size() > 3 || renglones.size() * tamano * 1.15f > alto - 2 * MM) && tamano > 7) {
+            tamano -= 0.5f;
+            renglones = renglones(NEGRITA, tamano, nombre, mitad - 3 * MM);
+        }
+        float y = (alto + renglones.size() * tamano * 1.15f) / 2 - tamano;
+        for (String renglon : renglones) {
+            texto(contenido, NEGRITA, tamano, renglon, 2 * MM, y, mitad - 3 * MM);
+            y -= tamano * 1.15f;
+        }
+
+        float x = mitad + 1 * MM;
+        float anchoDatos = ancho - x - 1.5f * MM;
+        List<String> datos = new ArrayList<>(List.of("Firmado digitalmente por"));
+        List<String> nombreDatos = renglones(NEGRITA, 7, nombre, anchoDatos);
+        List<String> cargoDatos = renglones(NORMAL, 6.5f, cargo, anchoDatos);
+        datos.addAll(nombreDatos);
+        datos.addAll(cargoDatos);
+        datos.add("Fecha: " + fecha);
+        float paso = Math.min(2.8f * MM, (alto - 2 * MM) / datos.size());
+        y = (alto + datos.size() * paso) / 2 - paso + 0.5f * MM;
+        for (int i = 0; i < datos.size(); i++) {
+            boolean esNombre = i >= 1 && i <= nombreDatos.size();
+            texto(contenido, esNombre ? NEGRITA : NORMAL, esNombre ? 7 : 6.5f, datos.get(i), x, y, anchoDatos);
+            y -= paso;
+        }
+    }
+
+    /** Escribe una línea; si no cabe en {@code maxAncho}, reduce la letra hasta que quepa. */
+    private static void texto(PDPageContentStream contenido, PDType1Font fuente, float tamano, String texto,
+                              float x, float y, float maxAncho) throws IOException {
+        String limpio = latin1(texto);
+        float ancho = fuente.getStringWidth(limpio) / 1000 * tamano;
+        contenido.beginText();
+        contenido.setFont(fuente, ancho > maxAncho ? tamano * maxAncho / ancho : tamano);
+        contenido.newLineAtOffset(x, y);
+        contenido.showText(limpio);
+        contenido.endText();
+    }
+
+    /** Parte el texto en renglones por palabras para que cada uno quepa en {@code ancho}. */
+    private static List<String> renglones(PDType1Font fuente, float tamano, String texto, float ancho)
+            throws IOException {
+        List<String> renglones = new ArrayList<>();
+        StringBuilder actual = new StringBuilder();
+        for (String palabra : latin1(texto).split("\\s+")) {
+            String prueba = actual.isEmpty() ? palabra : actual + " " + palabra;
+            if (!actual.isEmpty() && fuente.getStringWidth(prueba) / 1000 * tamano > ancho) {
+                renglones.add(actual.toString());
+                actual = new StringBuilder(palabra);
+            } else {
+                actual = new StringBuilder(prueba);
+            }
+        }
+        if (!actual.isEmpty()) {
+            renglones.add(actual.toString());
+        }
+        return renglones;
     }
 
     private static byte[] cms(InputStream contenido, Certificado c) throws IOException {
