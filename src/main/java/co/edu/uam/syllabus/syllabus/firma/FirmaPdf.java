@@ -5,10 +5,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
-import java.security.KeyStore;
 import java.security.PrivateKey;
-import java.security.cert.Certificate;
+import java.security.Provider;
+import java.security.Signature;
 import java.security.cert.CertificateExpiredException;
 import java.security.cert.CertificateNotYetValidException;
 import java.security.cert.X509Certificate;
@@ -17,9 +18,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Calendar;
-import java.util.Collections;
 import java.util.List;
 import javax.naming.InvalidNameException;
 import javax.naming.ldap.LdapName;
@@ -44,15 +43,30 @@ import org.apache.pdfbox.pdmodel.interactive.form.PDAcroForm;
 import org.apache.pdfbox.pdmodel.interactive.form.PDSignatureField;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.pdfbox.text.TextPosition;
+import org.bouncycastle.asn1.pkcs.ContentInfo;
+import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
+import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
+import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.cert.jcajce.JcaCertStore;
+import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cms.CMSException;
 import org.bouncycastle.cms.CMSProcessableByteArray;
 import org.bouncycastle.cms.CMSSignedDataGenerator;
 import org.bouncycastle.cms.jcajce.JcaSignerInfoGeneratorBuilder;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter;
 import org.bouncycastle.operator.ContentSigner;
+import org.bouncycastle.operator.InputDecryptorProvider;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.bouncycastle.operator.jcajce.JcaDigestCalculatorProviderBuilder;
+import org.bouncycastle.pkcs.PKCS12PfxPdu;
+import org.bouncycastle.pkcs.PKCS12SafeBag;
+import org.bouncycastle.pkcs.PKCS12SafeBagFactory;
+import org.bouncycastle.pkcs.PKCS8EncryptedPrivateKeyInfo;
+import org.bouncycastle.pkcs.PKCSException;
+import org.bouncycastle.pkcs.jcajce.JcePKCS12MacCalculatorBuilderProvider;
+import org.bouncycastle.pkcs.jcajce.JcePKCSPBEInputDecryptorProviderBuilder;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
@@ -69,35 +83,89 @@ public class FirmaPdf {
     private static final float MM = 72f / 25.4f;
     private static final DateTimeFormatter FECHA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
             .withZone(ZoneId.of("America/Bogota"));
+    private static final String CLAVE_INCORRECTA = "La contraseña del certificado no es correcta.";
+    /** Proveedor de BouncyCastle solo para descifrar el archivo: admite los cifrados antiguos y los nuevos. */
+    private static final Provider BC = new BouncyCastleProvider();
+    private static final JcaPEMKeyConverter LLAVES = new JcaPEMKeyConverter();
+    private static final JcaX509CertificateConverter CERTIFICADOS = new JcaX509CertificateConverter();
 
     /** Certificado abierto con su clave privada; los datos de texto son los que se muestran y guardan. */
     public record Certificado(PrivateKey clave, List<X509Certificate> cadena, String titular, String nombre,
                               String emisor, String serie, Instant vence) {}
 
-    /** Abre el archivo .p12/.pfx con su contraseña y comprueba que el certificado sirva para firmar. */
+    /**
+     * Abre el archivo .p12/.pfx con su contraseña y comprueba que el certificado sirva para firmar.
+     * Se lee con BouncyCastle y no con el KeyStore de Java porque Adobe Acrobat agrega a sus
+     * identidades digitales un bloque propio que Java rechaza; aquí los bloques desconocidos se ignoran.
+     */
     public Certificado abrir(byte[] archivo, char[] contrasena) {
+        PKCS12PfxPdu pfx;
         try {
-            KeyStore almacen = KeyStore.getInstance("PKCS12");
-            almacen.load(new ByteArrayInputStream(archivo), contrasena);
-            for (String alias : Collections.list(almacen.aliases())) {
-                if (!almacen.isKeyEntry(alias)) {
-                    continue;
+            pfx = new PKCS12PfxPdu(archivo);
+        } catch (IOException | RuntimeException e) {
+            throw invalido("El archivo no es un certificado de firma .p12 o .pfx.");
+        }
+        try {
+            if (pfx.hasMac() && !pfx.isMacValid(
+                    new JcePKCS12MacCalculatorBuilderProvider().setProvider(BC), contrasena)) {
+                throw invalido(CLAVE_INCORRECTA);
+            }
+            InputDecryptorProvider descifrador = new JcePKCSPBEInputDecryptorProviderBuilder()
+                    .setProvider(BC).build(contrasena);
+            List<PrivateKey> claves = new ArrayList<>();
+            List<X509Certificate> certificados = new ArrayList<>();
+            for (ContentInfo contenido : pfx.getContentInfos()) {
+                PKCS12SafeBagFactory bolsas = PKCSObjectIdentifiers.encryptedData.equals(contenido.getContentType())
+                        ? new PKCS12SafeBagFactory(contenido, descifrador)
+                        : new PKCS12SafeBagFactory(contenido);
+                for (PKCS12SafeBag bolsa : bolsas.getSafeBags()) {
+                    switch (bolsa.getBagValue()) {
+                        case PKCS8EncryptedPrivateKeyInfo cifrada ->
+                                claves.add(LLAVES.getPrivateKey(cifrada.decryptPrivateKeyInfo(descifrador)));
+                        case PrivateKeyInfo clave -> claves.add(LLAVES.getPrivateKey(clave));
+                        case X509CertificateHolder certificado -> certificados.add(CERTIFICADOS.getCertificate(certificado));
+                        default -> { } // bloques propios de cada programa (p. ej. Adobe Acrobat)
+                    }
                 }
-                PrivateKey clave = (PrivateKey) almacen.getKey(alias, contrasena);
-                Certificate[] cadena = almacen.getCertificateChain(alias);
-                if (clave == null || cadena == null || cadena.length == 0) {
-                    continue;
+            }
+            for (PrivateKey clave : claves) {
+                for (X509Certificate certificado : certificados) {
+                    if (sonPareja(clave, certificado)) {
+                        validar(certificado);
+                        List<X509Certificate> cadena = new ArrayList<>(List.of(certificado));
+                        certificados.stream().filter(c -> c != certificado).forEach(cadena::add);
+                        return certificado(clave, cadena);
+                    }
                 }
-                List<X509Certificate> x509 = Arrays.stream(cadena).map(c -> (X509Certificate) c).toList();
-                validar(x509.getFirst());
-                return certificado(clave, x509);
             }
             throw invalido("El archivo no contiene un certificado con clave privada para firmar.");
-        } catch (IOException e) {
-            throw invalido("No se pudo abrir el certificado: revise la contraseña y que el archivo sea .p12 o .pfx.");
-        } catch (GeneralSecurityException e) {
+        } catch (PKCSException e) {
+            throw invalido(CLAVE_INCORRECTA);
+        } catch (IOException | GeneralSecurityException e) {
             throw invalido("No se pudo leer la clave del certificado: " + e.getMessage());
         }
+    }
+
+    /** La clave privada corresponde al certificado si lo que firma se verifica con su clave pública. */
+    private static boolean sonPareja(PrivateKey clave, X509Certificate certificado) {
+        try {
+            String algoritmo = algoritmo(clave);
+            byte[] prueba = "pareja".getBytes(StandardCharsets.UTF_8);
+            Signature firma = Signature.getInstance(algoritmo);
+            firma.initSign(clave);
+            firma.update(prueba);
+            byte[] firmado = firma.sign();
+            Signature verificacion = Signature.getInstance(algoritmo);
+            verificacion.initVerify(certificado.getPublicKey());
+            verificacion.update(prueba);
+            return verificacion.verify(firmado);
+        } catch (GeneralSecurityException e) {
+            return false;
+        }
+    }
+
+    private static String algoritmo(PrivateKey clave) {
+        return "EC".equals(clave.getAlgorithm()) ? "SHA256withECDSA" : "SHA256withRSA";
     }
 
     /**
@@ -230,8 +298,7 @@ public class FirmaPdf {
 
     private static byte[] cms(InputStream contenido, Certificado c) throws IOException {
         try {
-            String algoritmo = "EC".equals(c.clave().getAlgorithm()) ? "SHA256withECDSA" : "SHA256withRSA";
-            ContentSigner firmante = new JcaContentSignerBuilder(algoritmo).build(c.clave());
+            ContentSigner firmante = new JcaContentSignerBuilder(algoritmo(c.clave())).build(c.clave());
             CMSSignedDataGenerator generador = new CMSSignedDataGenerator();
             generador.addSignerInfoGenerator(new JcaSignerInfoGeneratorBuilder(
                     new JcaDigestCalculatorProviderBuilder().build()).build(firmante, c.cadena().getFirst()));
