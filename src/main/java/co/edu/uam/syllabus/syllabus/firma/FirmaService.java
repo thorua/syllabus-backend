@@ -284,7 +284,7 @@ public class FirmaService {
                 .query(byte[].class).optional();
     }
 
-    /** Registra (o reemplaza) la rúbrica: una imagen subida o dibujada, que se limpia antes de guardarla. */
+    /** Registra (o reemplaza) la apariencia de la firma: appearances.acrodata de Acrobat o una imagen, ya limpia. */
     @Transactional
     public void guardarImagenDeFirma(UUID usuario, MultipartFile archivo) {
         byte[] rubrica = firmaPdf.rubrica(bytes(archivo));

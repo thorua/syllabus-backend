@@ -289,7 +289,7 @@ public class FirmaPdf {
             }
         }
         if (maxX < 0) {
-            throw invalido("La imagen no tiene trazos: dibuje su firma o suba una imagen donde se vea.");
+            throw invalido("No se encontró la firma en el archivo: suba appearances.acrodata o una imagen donde se vea su firma.");
         }
         BufferedImage recorte = limpia.getSubimage(minX, minY, maxX - minX + 1, maxY - minY + 1);
         double escala = Math.min(1, Math.min(900.0 / recorte.getWidth(), 300.0 / recorte.getHeight()));
