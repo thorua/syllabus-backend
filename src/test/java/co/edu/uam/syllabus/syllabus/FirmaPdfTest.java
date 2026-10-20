@@ -4,7 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import co.edu.uam.syllabus.syllabus.firma.FirmaPdf;
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.security.KeyPair;
@@ -13,6 +18,12 @@ import java.security.KeyStore;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
+import javax.imageio.ImageIO;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
 import org.bouncycastle.asn1.ASN1Encodable;
 import org.bouncycastle.asn1.ASN1Integer;
 import org.bouncycastle.asn1.ASN1ObjectIdentifier;
@@ -64,6 +75,41 @@ class FirmaPdfTest {
         assertThatThrownBy(() -> firmaPdf.abrir("no es un certificado".getBytes(), CLAVE))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("no es un certificado de firma .p12 o .pfx");
+    }
+
+    @Test
+    void tomaLaFirmaDelArchivoDeAparienciasDeAcrobatSinLaCuadriculaDelPapel() throws Exception {
+        // appearances.acrodata es un PDF con una página por apariencia: aquí, una firma escaneada
+        // sobre papel cuadriculado (puntos sueltos por toda la hoja).
+        BufferedImage escaneo = new BufferedImage(1600, 1000, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = escaneo.createGraphics();
+        g.setColor(Color.WHITE);
+        g.fillRect(0, 0, 1600, 1000);
+        g.setColor(Color.BLACK);
+        for (int x = 0; x < 1600; x += 200) {
+            for (int y = 0; y < 1000; y += 12) {
+                g.fillRect(x, y, 2, 3);
+            }
+        }
+        g.setStroke(new BasicStroke(8));
+        g.drawLine(500, 700, 800, 300);
+        g.drawLine(800, 300, 1100, 650);
+        g.dispose();
+        byte[] apariencias;
+        try (PDDocument pdf = new PDDocument(); ByteArrayOutputStream salida = new ByteArrayOutputStream()) {
+            PDPage pagina = new PDPage(new PDRectangle(800, 500));
+            pdf.addPage(pagina);
+            try (PDPageContentStream contenido = new PDPageContentStream(pdf, pagina)) {
+                contenido.drawImage(LosslessFactory.createFromImage(pdf, escaneo), 0, 0, 800, 500);
+            }
+            pdf.save(salida);
+            apariencias = salida.toByteArray();
+        }
+
+        BufferedImage rubrica = ImageIO.read(new ByteArrayInputStream(firmaPdf.rubrica(apariencias)));
+        // Recortada al trazo (300 × 400 px de 1600 × 1000): la cuadrícula no amplía el recorte.
+        assertThat(rubrica.getWidth()).isLessThan(rubrica.getHeight() * 2);
+        assertThat(rubrica.getRGB(0, 0) >>> 24).isZero();
     }
 
     /**

@@ -46,6 +46,8 @@ import org.apache.pdfbox.pdmodel.interactive.digitalsignature.PDSignature;
 import org.apache.pdfbox.pdmodel.interactive.digitalsignature.SignatureOptions;
 import org.apache.pdfbox.pdmodel.interactive.form.PDAcroForm;
 import org.apache.pdfbox.pdmodel.interactive.form.PDSignatureField;
+import org.apache.pdfbox.rendering.ImageType;
+import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.pdfbox.text.TextPosition;
 import org.bouncycastle.asn1.pkcs.ContentInfo;
@@ -169,31 +171,95 @@ public class FirmaPdf {
         }
     }
 
+    /**
+     * Borra las manchas sueltas (puntos de la cuadrícula del papel, polvo del escáner): las zonas de
+     * tinta conectadas que no llegan al 2 % de la más grande. Los trazos de la firma son continuos
+     * y mucho más grandes, así que se conservan, y el recorte queda ajustado a la firma.
+     */
+    private static void quitarMotas(int[] pixeles, int ancho, int alto) {
+        int[] zona = new int[pixeles.length];
+        List<int[]> zonas = new ArrayList<>();
+        int[] pila = new int[pixeles.length];
+        for (int inicio = 0; inicio < pixeles.length; inicio++) {
+            if (pixeles[inicio] == 0 || zona[inicio] != 0) {
+                continue;
+            }
+            int numero = zonas.size() + 1;
+            int tope = 0;
+            int tamano = 0;
+            pila[tope++] = inicio;
+            zona[inicio] = numero;
+            while (tope > 0) {
+                int i = pila[--tope];
+                tamano++;
+                int x = i % ancho;
+                int y = i / ancho;
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dx = -1; dx <= 1; dx++) {
+                        int nx = x + dx;
+                        int ny = y + dy;
+                        if (nx < 0 || ny < 0 || nx >= ancho || ny >= alto) {
+                            continue;
+                        }
+                        int vecino = ny * ancho + nx;
+                        if (pixeles[vecino] != 0 && zona[vecino] == 0) {
+                            zona[vecino] = numero;
+                            pila[tope++] = vecino;
+                        }
+                    }
+                }
+            }
+            zonas.add(new int[] {tamano});
+        }
+        int mayor = zonas.stream().mapToInt(z -> z[0]).max().orElse(0);
+        int minimo = Math.max(8, mayor / 50);
+        for (int i = 0; i < pixeles.length; i++) {
+            if (zona[i] != 0 && zonas.get(zona[i] - 1)[0] < minimo) {
+                pixeles[i] = 0;
+            }
+        }
+    }
+
+    private static boolean esPdf(byte[] archivo) {
+        return archivo.length > 4 && new String(archivo, 0, 5, StandardCharsets.ISO_8859_1).equals("%PDF-");
+    }
+
+    private static BufferedImage imagen(byte[] archivo) {
+        try {
+            return ImageIO.read(new ByteArrayInputStream(archivo));
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    /** Dibuja la primera página del archivo de apariencias de Acrobat: la firma como la muestra Acrobat. */
+    private static BufferedImage aparienciaDeAcrobat(byte[] archivo) {
+        try (PDDocument apariencias = Loader.loadPDF(archivo)) {
+            return apariencias.getNumberOfPages() == 0 ? null
+                    : new PDFRenderer(apariencias).renderImageWithDPI(0, 150, ImageType.RGB);
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
     private static String algoritmo(PrivateKey clave) {
         return "EC".equals(clave.getAlgorithm()) ? "SHA256withECDSA" : "SHA256withRSA";
     }
 
     /**
-     * Limpia la imagen de la firma manuscrita (subida o dibujada): el fondo claro queda transparente,
-     * se recorta a lo dibujado y se reduce a un tamaño moderado. Devuelve un PNG.
+     * Limpia la imagen de la firma manuscrita: el fondo claro queda transparente, se recorta a lo
+     * dibujado y se reduce a un tamaño moderado. Devuelve un PNG. Acepta una imagen (PNG o JPG) o el
+     * archivo de apariencias de Adobe Acrobat ({@code appearances.acrodata}, que es un PDF con una
+     * página por apariencia de firma): de él se toma la primera apariencia, tal como la dibuja Acrobat.
      */
     public byte[] rubrica(byte[] archivo) {
-        BufferedImage original;
-        try {
-            original = ImageIO.read(new ByteArrayInputStream(archivo));
-        } catch (IOException e) {
-            original = null;
-        }
+        BufferedImage original = esPdf(archivo) ? aparienciaDeAcrobat(archivo) : imagen(archivo);
         if (original == null) {
-            throw invalido("La imagen de la firma debe ser PNG o JPG.");
+            throw invalido("La firma debe ser una imagen PNG o JPG, o el archivo appearances.acrodata de Acrobat.");
         }
         int ancho = original.getWidth();
         int alto = original.getHeight();
-        BufferedImage limpia = new BufferedImage(ancho, alto, BufferedImage.TYPE_INT_ARGB);
-        int minX = ancho;
-        int minY = alto;
-        int maxX = -1;
-        int maxY = -1;
+        int[] pixeles = new int[ancho * alto];
         for (int y = 0; y < alto; y++) {
             for (int x = 0; x < ancho; x++) {
                 int argb = original.getRGB(x, y);
@@ -204,11 +270,22 @@ public class FirmaPdf {
                 }
                 // El borde del trazo se desvanece en vez de cortarse, para que no quede un halo blanco.
                 int alfa = luz > 160 ? opacidad * (215 - luz) / 55 : opacidad;
-                limpia.setRGB(x, y, (alfa << 24) | (argb & 0xFFFFFF));
-                minX = Math.min(minX, x);
-                minY = Math.min(minY, y);
-                maxX = Math.max(maxX, x);
-                maxY = Math.max(maxY, y);
+                pixeles[y * ancho + x] = (alfa << 24) | (argb & 0xFFFFFF);
+            }
+        }
+        quitarMotas(pixeles, ancho, alto);
+        BufferedImage limpia = new BufferedImage(ancho, alto, BufferedImage.TYPE_INT_ARGB);
+        limpia.setRGB(0, 0, ancho, alto, pixeles, 0, ancho);
+        int minX = ancho;
+        int minY = alto;
+        int maxX = -1;
+        int maxY = -1;
+        for (int i = 0; i < pixeles.length; i++) {
+            if (pixeles[i] != 0) {
+                minX = Math.min(minX, i % ancho);
+                minY = Math.min(minY, i / ancho);
+                maxX = Math.max(maxX, i % ancho);
+                maxY = Math.max(maxY, i / ancho);
             }
         }
         if (maxX < 0) {
@@ -282,7 +359,7 @@ public class FirmaPdf {
             if (t != null) {
                 float alto = documento.getPage(i).getMediaBox().getHeight();
                 float base = alto - t.getYDirAdj() + t.getHeightDir() + 1.5f * MM;
-                return new Casilla(i, new PDRectangle(t.getXDirAdj(), base, 74 * MM, 22 * MM));
+                return new Casilla(i, new PDRectangle(t.getXDirAdj(), base, 74 * MM, 30 * MM));
             }
         }
         return null;
