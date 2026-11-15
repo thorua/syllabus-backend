@@ -33,10 +33,12 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST,
                                 "/api/auth/login", "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
-                        .requestMatchers("/api/docs/**", "/api/swagger-ui/**", "/actuator/health", "/error").permitAll()
+                        .requestMatchers("/api/docs/**", "/api/swagger-ui/**").permitAll()
                         // El logo se muestra en <img>, que no envía el token; es información pública.
                         .requestMatchers(HttpMethod.GET, "/api/settings/logo").permitAll()
-                        .anyRequest().authenticated())
+                        .requestMatchers("/api/**").authenticated()
+                        // Fuera de la API: la interfaz Angular (archivos estáticos), /actuator/health y /error.
+                        .anyRequest().permitAll())
                 .oauth2ResourceServer(rs -> rs.jwt(jwt -> jwt.jwtAuthenticationConverter(cargarUsuario(usuarios))))
                 .build();
     }

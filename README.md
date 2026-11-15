@@ -2,7 +2,7 @@
 
 API del sistema de syllabus de la Universidad Autónoma de Manizales: Java 21, Spring Boot 3.5 (Security con JWT, Data JPA, Flyway), PostgreSQL 16, PDF en formato Almera y firma digital con PDFBox.
 
-El frontend está en el repositorio `syllabus-frontend`. Este repositorio trae el `docker-compose.yml` que levanta todo el sistema.
+El frontend (Angular) está en el repositorio `syllabus-frontend`. Este repositorio trae el `docker-compose.yml` que levanta todo el sistema en dos contenedores: `syllabus-app` (la API y la interfaz Angular compilada, servidas por Spring Boot en el mismo origen) y `syllabus-db` (PostgreSQL). En desarrollo se agrega `syllabus-mailpit`.
 
 ## Ponerlo a funcionar
 
@@ -50,5 +50,7 @@ docker compose up -d db mailpit   # base de datos y correo de prueba
 ./mvnw spring-boot:run            # API en http://localhost:8080
 ./mvnw verify                     # pruebas (JUnit + Testcontainers, requiere Docker)
 ```
+
+La interfaz se desarrolla aparte con `npm start` en `syllabus-frontend` (http://localhost:4200, con proxy `/api` a este backend).
 
 Producción: `COMPOSE_PROFILES` vacío, `FLYWAY_LOCATIONS=classpath:db/migration` (sin datos demo), y secretos y correo reales en `.env`.

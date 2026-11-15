@@ -17,4 +17,10 @@ jobs:
           java-version: 21
           cache: maven
       - run: ./mvnw -B verify
-      - run: docker build -t syllabus-backend .
+      # La imagen incluye la interfaz Angular: se compila con el repositorio del frontend.
+      - uses: actions/checkout@v4
+        with:
+          repository: thorua/syllabus-frontend
+          ref: ${{ github.head_ref || github.ref_name }}
+          path: frontend
+      - run: docker build --build-context frontend=frontend -t syllabus-app .
